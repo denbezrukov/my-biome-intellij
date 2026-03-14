@@ -116,7 +116,10 @@ class FormattingTest {
                 }
 
                 step("Verify content is unchanged (already well-formatted)") {
-                    Thread.sleep(2000)
+                    waitFor(ofSeconds(10)) {
+                        val afterFormat = getEditorText()
+                        beforeFormat.trim() == afterFormat.trim()
+                    }
                     val afterFormat = getEditorText()
                     assert(beforeFormat.trim() == afterFormat.trim()) {
                         "Expected well-formatted file to remain unchanged.\nBefore: $beforeFormat\nAfter: $afterFormat"

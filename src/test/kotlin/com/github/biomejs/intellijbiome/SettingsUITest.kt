@@ -253,7 +253,19 @@ class SettingsUITest {
         }
 
         step("Verify checkboxes are disabled") {
-            Thread.sleep(1000)
+            waitFor(ofSeconds(10)) {
+                val checkboxes = remoteRobot.findAll<ComponentFixture>(
+                    byXpath("//div[@class='JBCheckBox']")
+                )
+                checkboxes.all {
+                    try {
+                        !it.callJs<Boolean>("component.isEnabled();")
+                    } catch (e: Exception) {
+                        true
+                    }
+                }
+            }
+
             val checkboxes = remoteRobot.findAll<ComponentFixture>(
                 byXpath("//div[@class='JBCheckBox']")
             )

@@ -48,7 +48,7 @@ class Editor(
             ApplicationManager.getApplication().invokeAndWait({
                 CommandProcessor.getInstance().executeCommand(project, {
                     ApplicationManager.getApplication().runWriteAction({
-                        document.setText("${text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}")
+                        document.setText("${text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}")
                     })
                 }, "Insert Text", null)
             })

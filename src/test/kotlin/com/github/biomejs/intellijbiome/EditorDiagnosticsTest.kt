@@ -102,7 +102,10 @@ class EditorDiagnosticsTest {
             }
 
             step("Wait for LSP to process the file") {
-                Thread.sleep(5000)
+                waitFor(ofSeconds(30)) {
+                    val text = getEditorText()
+                    text.contains("Hello, world!")
+                }
             }
 
             step("Verify editor text is present") {
