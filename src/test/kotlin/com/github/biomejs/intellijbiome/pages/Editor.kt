@@ -25,4 +25,34 @@ fun ContainerFixture.editor(title: String,
 class Editor(
     remoteRobot: RemoteRobot,
     remoteComponent: RemoteComponent,
-) : CommonContainerFixture(remoteRobot, remoteComponent)
+) : CommonContainerFixture(remoteRobot, remoteComponent) {
+
+    val text: String
+        get() = callJs(
+            """
+            importPackage(com.intellij.openapi.fileEditor)
+            importPackage(com.intellij.openapi.fileEditor.impl)
+            const editor = component.getEditor()
+            editor.getDocument().getText()
+        """, true
+        )
+
+    fun insertText(text: String) {
+        runJs(
+            """
+            importPackage(com.intellij.openapi.command)
+            importPackage(com.intellij.openapi.application)
+            const editor = component.getEditor()
+            const document = editor.getDocument()
+            const project = editor.getProject()
+            ApplicationManager.getApplication().invokeAndWait({
+                CommandProcessor.getInstance().executeCommand(project, {
+                    ApplicationManager.getApplication().runWriteAction({
+                        document.setText("${text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}")
+                    })
+                }, "Insert Text", null)
+            })
+        """, true
+        )
+    }
+}
