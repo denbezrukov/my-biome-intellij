@@ -17,34 +17,37 @@ class BiomeCheckOnSaveAction : ActionsOnSaveFileDocumentManagerListener.ActionOn
         return !BiomeSettings.getInstance(project).getEnabledFeatures().isEmpty()
     }
 
-    override fun processDocuments(project: Project,
-        documents: Array<Document>) {
+    override fun processDocuments(project: Project, documents: Array<Document>) {
         val features = BiomeSettings.getInstance(project).getEnabledFeatures()
         val featuresInfo = features.joinToString(prefix = "(", postfix = ")") { it.toString().lowercase() }
         val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Biome")
 
+        val supportedDocs = documents.filter {
+            val settings = BiomeSettings.getInstance(project)
+            val manager = FileDocumentManager.getInstance()
+            val virtualFile = manager.getFile(it) ?: return@filter false
+            settings.fileSupported(virtualFile)
+        }
+
+        if (supportedDocs.isEmpty()) return
+
         runWithModalProgressBlocking(project,
             BiomeBundle.message("biome.run.biome.check.with.features", featuresInfo)) {
-            try {
-                withTimeout(5_000) {
-                    documents.filter {
-                        val settings = BiomeSettings.getInstance(project)
-                        val manager = FileDocumentManager.getInstance()
-                        val virtualFile = manager.getFile(it) ?: return@filter false
-                        return@filter settings.fileSupported(virtualFile)
-                    }.forEach {
-                        BiomeServerService.getInstance(project).executeFeatures(it, features)
+            supportedDocs.forEach { document ->
+                try {
+                    withTimeout(5_000) {
+                        BiomeServerService.getInstance(project).executeFeatures(document, features)
                     }
+                } catch (e: Exception) {
+                    notificationGroup.createNotification(
+                        title = BiomeBundle.message("biome.apply.feature.on.save.failure.label", featuresInfo),
+                        content = BiomeBundle.message(
+                            "biome.apply.feature.on.save.failure.description",
+                            featuresInfo,
+                            e.message.toString()
+                        ),
+                        type = NotificationType.ERROR).notify(project)
                 }
-            } catch (e: Exception) {
-                notificationGroup.createNotification(
-                    title = BiomeBundle.message("biome.apply.feature.on.save.failure.label", featuresInfo),
-                    content = BiomeBundle.message(
-                        "biome.apply.feature.on.save.failure.description",
-                        featuresInfo,
-                        e.message.toString()
-                    ),
-                    type = NotificationType.ERROR).notify(project)
             }
         }
     }
