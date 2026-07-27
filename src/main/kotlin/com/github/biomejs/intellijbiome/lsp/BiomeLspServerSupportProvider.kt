@@ -113,8 +113,13 @@ private class BiomeLspServerDescriptor(
     }
 
     override val lspDiagnosticsSupport = object : LspDiagnosticsSupport() {
-        override fun getMessage(diagnostic: Diagnostic) =
-            "Biome: ${diagnostic.message} (${diagnostic.code.left})"
+        override fun getMessage(diagnostic: Diagnostic): String {
+            val codeStr = diagnostic.code?.let { code ->
+                val codeValue = code.left ?: code.right?.toString()
+                if (codeValue != null) " ($codeValue)" else ""
+            } ?: ""
+            return "Biome: ${diagnostic.message}$codeStr"
+        }
 
         override fun getTooltip(diagnostic: Diagnostic) =
             getMessage(diagnostic)
