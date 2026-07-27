@@ -63,7 +63,6 @@
     <actionOnSave id="BiomeCheckOnSaveAction"
                   implementation="com.github.biomejs.intellijbiome.actions.BiomeCheckOnSaveAction"
                   order="first, before FormatOnSaveAction"/>
-    />
   </extensions>
   <actions>
     <action
