@@ -33,21 +33,21 @@ class BiomeCheckOnSaveAction : ActionsOnSaveFileDocumentManagerListener.ActionOn
 
         runWithModalProgressBlocking(project,
             BiomeBundle.message("biome.run.biome.check.with.features", featuresInfo)) {
-            supportedDocs.forEach { document ->
-                try {
-                    withTimeout(5_000) {
+            try {
+                withTimeout(5_000) {
+                    supportedDocs.forEach { document ->
                         BiomeServerService.getInstance(project).executeFeatures(document, features)
                     }
-                } catch (e: Exception) {
-                    notificationGroup.createNotification(
-                        title = BiomeBundle.message("biome.apply.feature.on.save.failure.label", featuresInfo),
-                        content = BiomeBundle.message(
-                            "biome.apply.feature.on.save.failure.description",
-                            featuresInfo,
-                            e.message.toString()
-                        ),
-                        type = NotificationType.ERROR).notify(project)
                 }
+            } catch (e: Exception) {
+                notificationGroup.createNotification(
+                    title = BiomeBundle.message("biome.apply.feature.on.save.failure.label", featuresInfo),
+                    content = BiomeBundle.message(
+                        "biome.apply.feature.on.save.failure.description",
+                        featuresInfo,
+                        e.message.toString()
+                    ),
+                    type = NotificationType.ERROR).notify(project)
             }
         }
     }
