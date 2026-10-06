@@ -13,13 +13,21 @@ Please review the following guidelines before making your contribution.
 
 Ensure that you have the following tools installed on your machine:
 
-- Java development kit (JDK) 17
+- Java development kit (JDK) 21
+- Node.js 24, Corepack, and pnpm 10.5.2 (for the pinned Biome test packages)
 - IntelliJ IDEA Ultimate Edition
 - git-cliff (_maintainers only_)
 
 1. Fork the repository and clone it to your local machine.
    ```shell
    gh repo fork biomejs/biome-intellij --clone
+   ```
+
+2. Install Corepack and activate the test fixture package manager. Node.js 24 does not bundle Corepack.
+   ```shell
+   npm install --global corepack@0.34.0
+   corepack enable
+   corepack prepare pnpm@10.5.2 --activate
    ```
 
 ## Development
@@ -33,7 +41,22 @@ plugin loaded.
 
 ### Running tests
 
-To run the plugin's tests, run the `test` Gradle task.
+Run the required plugin regression suites from the repository root on Linux:
+
+```shell
+./gradlew cleanTest test --no-build-cache --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeManualConfigCliTest' --tests '*UnusedFunctionHighlightingTest'
+python3 .github/scripts/check-required-tests.py build/test-results/test
+```
+
+These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
+require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 17 named
+tests across five classes to execute without failures or skips. The CI
+job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
+
+To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
+
+The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 
 ```shell
 ./gradlew runIdeForUiTests &

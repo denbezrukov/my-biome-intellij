@@ -2,7 +2,6 @@ package com.github.biomejs.intellijbiome.settings
 
 import com.github.biomejs.intellijbiome.BiomeBundle
 import com.github.biomejs.intellijbiome.BiomePackage
-import com.github.biomejs.intellijbiome.extensions.isBiomeConfigFile
 import com.github.biomejs.intellijbiome.services.BiomeServerService
 import com.intellij.ide.actionsOnSave.ActionsOnSaveConfigurable
 import com.intellij.lang.javascript.JavaScriptBundle
@@ -13,17 +12,17 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.ContextHelpLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
-import com.intellij.ui.layout.ValidationInfoBuilder
 import com.intellij.ui.layout.not
 import com.intellij.ui.layout.selected
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.event.ItemEvent
+import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import javax.swing.JCheckBox
 import javax.swing.JRadioButton
 import javax.swing.event.HyperlinkEvent
@@ -104,7 +103,10 @@ class BiomeConfigurable(internal val project: Project) :
                     textFieldWithBrowseButton(
                         BiomeBundle.message("biome.config.path.label"),
                         project,
-                    ) { fileChosen(it) }.bindText(settings::configPath).validationOnInput(validateConfigDir())
+                    ) { fileChosen(it) }.bindText(settings::configPath)
+                        .validationOnInput { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
+                        .validationOnApply { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
+                        .comment(BiomeBundle.message("biome.config.path.help"))
                 }.visibleIf(manualConfiguration.selected)
             }
 
@@ -219,17 +221,21 @@ class BiomeConfigurable(internal val project: Project) :
         }
     }
 
-    private fun validateConfigDir(): ValidationInfoBuilder.(TextFieldWithBrowseButton) -> ValidationInfo? = {
-        val selected = VfsUtil.findFile(Path(it.text), true)
-        if (selected == null || !selected.exists()) {
-            ValidationInfo(BiomeBundle.message("biome.configuration.file.not.found"), it)
-        } else {
-            if (!selected.isBiomeConfigFile()) {
-                ValidationInfo(BiomeBundle.message("biome.configuration.file.not.found"), it)
-            } else {
-                null
+    internal fun validateConfigPath(field: TextFieldWithBrowseButton): ValidationInfo? {
+        if (field.text.isBlank()) return null
+
+        val valid = try {
+            val path = Path(field.text)
+            val configNames = listOf("biome.json", "biome.jsonc")
+            when {
+                Files.isRegularFile(path) -> path.fileName.toString() in configNames
+                Files.isDirectory(path) -> configNames.any { Files.isRegularFile(path.resolve(it)) }
+                else -> false
             }
+        } catch (_: InvalidPathException) {
+            false
         }
+        return if (valid) null else ValidationInfo(BiomeBundle.message("biome.configuration.file.not.found"), field)
     }
 
     private fun fileChosen(file: VirtualFile): String {
