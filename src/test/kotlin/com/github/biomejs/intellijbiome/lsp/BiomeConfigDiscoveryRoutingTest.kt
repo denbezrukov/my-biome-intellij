@@ -1,6 +1,8 @@
 package com.github.biomejs.intellijbiome.lsp
 
+import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.Disposer
@@ -106,12 +108,17 @@ class BiomeConfigDiscoveryRoutingTest : BiomeLspFixtureTestCase() {
         externalConfigs(child.directory)
         assertFalse(original.descriptor.isSupportedFile(child.source))
         dispatcher.runPendingReads(scope, expectEdt = true)
-        // Change SDK routing eligibility after the read, without a VFS/editor change.
-        val vfsCount = VirtualFileManager.getInstance().modificationCount
-        val rootCount = ProjectRootManager.getInstance(project).modificationCount
-        PsiTestUtil.addExcludedRoot(myFixture.module, child.directory)
-        assertEquals(vfsCount, VirtualFileManager.getInstance().modificationCount)
-        assertTrue(ProjectRootManager.getInstance(project).modificationCount > rootCount)
+        // Commit only the routing change: PsiTestUtil.addExcludedRoot also pumps indexing,
+        // whose lazy file reads can change the persistent VFS counter without VFS events.
+        WriteAction.run<RuntimeException> {
+            val vfsCount = VirtualFileManager.getInstance().modificationCount
+            val rootCount = ProjectRootManager.getInstance(project).modificationCount
+            ModuleRootModificationUtil.updateModel(myFixture.module) { model ->
+                model.contentEntries.single().addExcludeFolder(child.directory)
+            }
+            assertEquals(vfsCount, VirtualFileManager.getInstance().modificationCount)
+            assertTrue(ProjectRootManager.getInstance(project).modificationCount > rootCount)
+        }
         assertTrue(FileEditorManager.getInstance(project).isFileOpen(child.source))
         assertFalse(ProjectFileIndex.getInstance(project).isInContent(child.source))
         PlatformTestUtil.waitWithEventsDispatching("Queued recovery did not recheck the excluded editor", {
