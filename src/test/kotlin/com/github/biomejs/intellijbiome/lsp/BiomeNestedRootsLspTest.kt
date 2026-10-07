@@ -239,7 +239,14 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
                 freshDiagnostics.add(lspServer to file)
             }
         }, testRootDisposable, false)
-        BiomeSettings.getInstance(project).configurationMode = mode
+        BiomeSettings.getInstance(project).apply {
+            configurationMode = mode
+            if (mode == ConfigurationMode.MANUAL) {
+                // Blank Manual overrides now discover configs; this remains the explicit-override control.
+                configPath = parentFile.parent.path
+                executablePath = parentFile.parent.toNioPath().resolve("node_modules/.bin/biome").toString()
+            }
+        }
         // Separate VFS events must not schedule duplicate replacements, including before startup completes.
         repeat(5) {
             Files.writeString(config, valid + " ".repeat(it))

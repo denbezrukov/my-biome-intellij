@@ -68,7 +68,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
                     continue
                 }
                 val completed = withContext(Dispatchers.EDT) {
-                    if (project.isDisposed || BiomeSettings.getInstance(project).configurationMode != ConfigurationMode.AUTOMATIC) {
+                    if (project.isDisposed || !BiomeSettings.getInstance(project).usesConfigDiscovery()) {
                         return@withContext true
                     }
                     val manager = LspServerManager.getInstance(project)
@@ -96,7 +96,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
     private fun discoveryRequest(configs: List<VirtualFile>): DiscoveryRequest? {
         if (project.isDisposed) return null
         val settings = BiomeSettings.getInstance(project)
-        if (settings.configurationMode != ConfigurationMode.AUTOMATIC) return null
+        if (!settings.usesConfigDiscovery()) return null
         val inputs = captureInputs()
         val roots = inputs.roots
         val changedConfigs = configs.filter { config -> config.isValid && roots.any { VfsUtilCore.isAncestor(it, config, true) } }

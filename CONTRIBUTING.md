@@ -44,14 +44,14 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigDiscoveryRoutingTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigRecoveryLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest' --tests '*BiomeConfigDiscoveryRoutingTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 184 named
-tests across 23 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 197 named
+tests across 24 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
@@ -79,6 +79,29 @@ config-event bursts, and project/mode isolation. Before a recovery restart, ever
 executable must be reconstructable. Broken or missing replacements retain live servers while a bounded recovery
 request retries; the regression restores the executable without another config event or editor reopen. Cancellation
 also terminates a live preflight process without stopping the working servers. Config removal and reparenting remain separate lifecycle work.
+
+The manual executable recovery gate includes these named `BiomeManualConfigRecoveryLspTest` regressions:
+
+- `testMissingConfigCreationRecoversSameEditorWithSelectedExecutable`
+- `testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable`
+- `testWhitespaceOverrideUsesSameEditorDiscovery`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigCreation`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigRepair`
+- `testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation`
+- `testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery`
+- `testDisabledModePreventsPendingManualRecovery`
+- `testUnrelatedConfigDoesNotRecoverManualEditor`
+- `testManualRecoveryPreservesAnotherProjectServerAndFormatting`
+- `testDisposalCancelsPendingManualConfigRecovery`
+- `testExplicitOverrideInvalidatesQueuedManualRecovery`
+- `testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry`
+
+They retain the open editor, selected executable and real server version, and verify formatting with a different
+project dependency installed. XML-loaded whitespace overrides from older settings retain the same discovery behavior.
+Nonblank overrides retain exact configuration selection; the existing nested Manual
+negative control uses an explicit override. Mode changes, project disposal and unrelated config/project isolation
+remain covered. Controlled-dispatcher races also require changes to Manual config/executable selections to discard
+stale discovery requests before an EDT restart, then adopt the current executable on a fresh read.
 
 The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
 pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
