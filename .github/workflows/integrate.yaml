@@ -34,11 +34,14 @@ jobs:
       - name: Run plugin regression tests
         run: >-
           ./gradlew cleanTest test --no-build-cache
-          --tests '*BiomeManualConfigSettingsTest'
+          --tests '*BiomeCheckOnSaveActionTest'
+          --tests '*BiomeSaveOperationTest'
+          --tests '*BiomeManualConfigCliTest'
           --tests '*BiomeManualConfigLspTest'
           --tests '*BiomeManualConfigV1LspTest'
-          --tests '*BiomeManualConfigCliTest'
+          --tests '*BiomeSaveActionsTest'
           --tests '*UnusedFunctionHighlightingTest'
+          --tests '*BiomeManualConfigSettingsTest'
 
       - name: Require executed regression tests
         if: always()
