@@ -17,6 +17,7 @@ import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.replaceService
 import com.intellij.testFramework.builders.EmptyModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
 import kotlinx.coroutines.*
@@ -137,6 +138,87 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
         }
     }
 
+    fun testExplicitOverrideInvalidatesQueuedManualRecovery() = checkQueuedSettingsChange(changeExecutable = false)
+
+    fun testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry() = checkQueuedSettingsChange(changeExecutable = true)
+
+    private fun checkQueuedSettingsChange(changeExecutable: Boolean) {
+        assertNull("Controlled discovery must precede the default subscription",
+            project.getServiceIfCreated(BiomeConfigDiscoveryService::class.java))
+        val dispatcher = QueuedDiscoveryDispatcher()
+        val discoveryScope = CoroutineScope(SupervisorJob() + dispatcher)
+        com.intellij.openapi.util.Disposer.register(testRootDisposable) {
+            discoveryScope.cancel()
+            dispatcher.drainCancelledTasks()
+        }
+        project.replaceService(BiomeConfigDiscoveryService::class.java,
+            BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
+        externalConfig(config)
+        dispatcher.runPendingReads()
+        openSource()
+        assertFormatting()
+        val original = servers().single()
+        val nested = myFixture.tempDirFixture.createFile("pending/index.js", "const message=\"hello\";\n")
+        myFixture.configureFromExistingVirtualFile(nested)
+        waitUntilFileOpenedByLspServer(project, nested, timeout = 20)
+        events.awaitDiagnostics(nested, original)
+        val editor = myFixture.editor
+        val editors = FileEditorManager.getInstance(project).getEditors(nested).toList()
+        // Resolve fixture/VFS access and probe before the barrier; those helpers may dispatch IDE events.
+        val replacementExecutable = if (changeExecutable) myFixture.installedBiome("2.5.15").toString() else null
+        val explicitConfig = root.toNioPath().resolve("biome.json").toString()
+        Files.writeString(nested.parent.toNioPath().resolve("biome.json"), config)
+        VfsUtil.markDirtyAndRefresh(false, true, true, nested.parent)
+        assertFalse("The repaired nested config must make the ancestor request a recovery restart",
+            original.descriptor.isSupportedFile(nested))
+        // Finish the pooled read while holding EDT, then change the actual Manual selection.
+        dispatcher.runPendingReads()
+        if (changeExecutable) BiomeSettings.getInstance(project).executablePath = replacementExecutable!!
+        else BiomeSettings.getInstance(project).configPath = explicitConfig
+        settle()
+        assertEquals("A stale request must not stop the established server before a fresh pooled read",
+            listOf(original), servers().toList())
+        assertSame(editor, myFixture.editor)
+        assertEquals(editors, FileEditorManager.getInstance(project).getEditors(nested).toList())
+        if (changeExecutable) {
+            PlatformTestUtil.waitWithEventsDispatching("A fresh request did not adopt the changed Manual executable", {
+                dispatcher.runNextPendingTask()
+                servers().size == 2 && servers().all { it.initializeResult?.serverInfo?.version == "2.5.15" }
+            }, 20)
+            selectedExecutable = BiomeSettings.getInstance(project).executablePath
+            source = nested
+            assertFormatting("2.5.15")
+            assertSame(editor, myFixture.editor)
+            assertEquals(editors, FileEditorManager.getInstance(project).getEditors(nested).toList())
+        }
+    }
+
+    private class QueuedDiscoveryDispatcher : CoroutineDispatcher() {
+        private val queue = java.util.concurrent.LinkedBlockingQueue<Runnable>()
+        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.add(block) }
+
+        fun drainCancelledTasks() {
+            while (true) (queue.poll() ?: return).run()
+        }
+
+        fun runPendingReads() {
+            val application = com.intellij.openapi.application.ApplicationManager.getApplication()
+            check(application.isDispatchThread && !application.isWriteAccessAllowed)
+            repeat(2) {
+                val task = checkNotNull(queue.poll(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    "Manual discovery did not resume after its pooled read"
+                }
+                application.executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
+            }
+        }
+
+        fun runNextPendingTask() {
+            val task = queue.poll() ?: return
+            com.intellij.openapi.application.ApplicationManager.getApplication()
+                .executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
+        }
+    }
+
     fun testDisposalCancelsPendingManualConfigRecovery() {
         // Initialize primary editor services before secondary fixture leak tracking begins.
         openSource()
@@ -217,11 +299,11 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
     private fun servers(target: Project = project) = LspServerManager.getInstance(target)
         .getServersForProvider(BiomeLspServerSupportProvider::class.java)
 
-    private fun assertFormatting() {
+    private fun assertFormatting(version: String = "2.5.14") {
         waitUntilFileOpenedByLspServer(project, source, timeout = 20)
-        events.awaitDiagnostics(source, "2.5.14")
+        events.awaitDiagnostics(source, version)
         val owner = servers().single { it.descriptor.isSupportedFile(source) }
-        assertEquals("2.5.14", owner.initializeResult?.serverInfo?.version)
+        assertEquals(version, owner.initializeResult?.serverInfo?.version)
         assertEquals(selectedExecutable, (owner.descriptor as BiomeLspServerDescriptor).executable)
         formatDocument(project, myFixture.editor.document)
         assertEquals("const message = 'hello';\n", myFixture.editor.document.text)

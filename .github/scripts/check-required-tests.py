@@ -125,6 +125,8 @@ REQUIRED_TESTS = {
     PACKAGE + "lsp.BiomeManualConfigRecoveryLspTest": {
         "testDisabledModePreventsPendingManualRecovery",
         "testDisposalCancelsPendingManualConfigRecovery",
+        "testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry",
+        "testExplicitOverrideInvalidatesQueuedManualRecovery",
         "testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery",
         "testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation",
         "testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable",
