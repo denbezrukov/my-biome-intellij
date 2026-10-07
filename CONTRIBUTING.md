@@ -50,7 +50,7 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 176 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 179 named
 tests across 21 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
@@ -65,6 +65,9 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 - `testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension`
 - `testDisabledModeDoesNotRecoverNestedConfig`
 - `testManualModeDoesNotRecoverNestedConfig`
+- `testCancellingNestedRecoveryStopsPendingVersionProbe`
+- `testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement`
+- `testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement`
 - `testNestedRepairPreservesAnotherProjectServer`
 - `testNewIndependentChildConfigRecoversUnownedEditor`
 - `testRepairAfterDependencyRefreshRestoresIndependentWorkspace`
@@ -72,7 +75,10 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 - `testRepairWithoutRestartControlRestoresIndependentWorkspace`
 
 They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
-config-event bursts, and project/mode isolation. Config removal and reparenting remain separate lifecycle work.
+config-event bursts, and project/mode isolation. Before a recovery restart, every active workspace and prospective
+executable must be reconstructable. Broken or missing replacements retain live servers while a bounded recovery
+request retries; the regression restores the executable without another config event or editor reopen. Cancellation
+also terminates a live preflight process without stopping the working servers. Config removal and reparenting remain separate lifecycle work.
 
 The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
 pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,

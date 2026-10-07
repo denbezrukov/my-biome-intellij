@@ -287,6 +287,93 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
             (original + beforeRepair + repaired).toSet(), observedServers.toSet())
     }
 
+    fun testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement() = checkUnavailableSibling(missing = false)
+
+    fun testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement() = checkUnavailableSibling(missing = true)
+
+    fun testCancellingNestedRecoveryStopsPendingVersionProbe() = checkUnavailableSibling(missing = false, cancelProbe = true)
+
+    private fun checkUnavailableSibling(missing: Boolean, cancelProbe: Boolean = false) {
+        val discoveryScope = if (cancelProbe) CoroutineScope(SupervisorJob() + Dispatchers.Default) else null
+        if (discoveryScope != null) {
+            project.replaceService(BiomeConfigDiscoveryService::class.java,
+                BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
+            com.intellij.openapi.util.Disposer.register(testRootDisposable) { discoveryScope.cancel() }
+        }
+        exercise(parentFirst = true)
+        val root = parentFile.parent
+        val siblingRoot = myFixture.tempDirFixture.findOrCreateDir("unrelated")
+        TestNpmPackageInstaller(myFixture).installForTest(javaClass, root, "unrelated")
+        myFixture.tempDirFixture.createFile("unrelated/biome.json", "{}")
+        val siblingFile = myFixture.tempDirFixture.createFile("unrelated/index.js", "const message='sibling';\n")
+        myFixture.configureFromExistingVirtualFile(siblingFile)
+        waitUntilFileOpenedByLspServer(project, siblingFile, timeout = 20)
+        events.awaitDiagnostics(siblingFile)
+        val editorManager = FileEditorManager.getInstance(project)
+        val siblingEditors = editorManager.getEditors(siblingFile).toList()
+        val childEditors = editorManager.getEditors(childFile).toList()
+        val manager = LspServerManager.getInstance(project)
+        fun current() = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val childConfig = childFile.parent.toNioPath().resolve("biome.json")
+        val validConfig = Files.readString(childConfig)
+        Files.writeString(childConfig, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        val originals = current()
+        project.service<BiomeServerService>().restartBiomeServer()
+        PlatformTestUtil.waitWithEventsDispatching("Malformed child restart did not preserve the two valid roots", {
+            current().size == 2 && current().none { it in originals } &&
+                current().all { it.state == com.intellij.platform.lsp.api.LspServerState.Running }
+        }, 20)
+        val beforeRepair = current()
+        val sibling = beforeRepair.single { it.descriptor.roots.single() == siblingRoot }
+        events.awaitDiagnostics(siblingFile, sibling)
+        WriteCommandAction.runWriteCommandAction(project) {
+            FileDocumentManager.getInstance().getDocument(childFile)!!.setText("const message=\"child\";\n")
+        }
+        FileDocumentManager.getInstance().saveAllDocuments()
+        val executable = java.nio.file.Path.of((sibling.descriptor as BiomeLspServerDescriptor).executable)
+        val backup = executable.resolveSibling("biome-before-incomplete-install")
+        Files.move(executable, backup)
+        val probeMarker = siblingRoot.toNioPath().resolve("failed-probe")
+        if (!missing) Files.writeString(executable,
+            "require('node:fs').writeFileSync(${kotlinx.serialization.json.Json.encodeToString(probeMarker.toString())}, String(process.pid)); " +
+                if (cancelProbe) "setInterval(() => {}, 1000);\n" else "process.exit(42);\n")
+        try {
+            Files.writeString(childConfig, validConfig)
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+            if (!missing) PlatformTestUtil.waitWithEventsDispatching("Recovery never attempted the prospective sibling executable", {
+                Files.exists(probeMarker)
+            }, 10)
+            if (cancelProbe) {
+                val process = ProcessHandle.of(Files.readString(probeMarker).toLong()).orElseThrow()
+                assertTrue("The controlled version probe must be live before cancellation", process.isAlive)
+                discoveryScope!!.cancel()
+                PlatformTestUtil.waitWithEventsDispatching("Cancelling recovery did not terminate its pending version probe", {
+                    !process.isAlive
+                }, 3)
+            }
+            settleServers(beforeRepair)
+            formatExistingDocumentAndAssert(siblingFile, "const message = \"sibling\";\n")
+            assertEquals(siblingEditors, editorManager.getEditors(siblingFile).toList())
+            assertEquals(childEditors, editorManager.getEditors(childFile).toList())
+        } finally {
+            Files.deleteIfExists(executable)
+            Files.move(backup, executable)
+        }
+        if (cancelProbe) return
+        // The same bounded recovery request must retry; no second config event or reopen.
+        PlatformTestUtil.waitWithEventsDispatching("Recovery did not resume after the sibling installation completed", {
+            current().size == 3 && current().none { it in beforeRepair } &&
+                current().all { it.state == com.intellij.platform.lsp.api.LspServerState.Running }
+        }, 20)
+        val recovered = current()
+        events.awaitDiagnostics(childFile, recovered.single { it.descriptor.roots.single() == childFile.parent })
+        events.awaitDiagnostics(siblingFile, recovered.single { it.descriptor.roots.single() == siblingRoot })
+        formatExistingDocumentAndAssert(childFile, "const message = 'child';\n")
+        assertEquals(siblingEditors, editorManager.getEditors(siblingFile).toList())
+        assertEquals(childEditors, editorManager.getEditors(childFile).toList())
+    }
+
     private fun settleServers(expected: List<LspServer>) {
         val deadline = System.nanoTime() + 2_000_000_000L
         PlatformTestUtil.waitWithEventsDispatching("Config events did not settle", {
