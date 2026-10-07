@@ -70,9 +70,29 @@ class PublishDraftTest(unittest.TestCase):
         writes = [(method, path, data) for method, path, data, _ in self.calls if method != 'GET']
         self.assertEqual(['POST', 'POST', 'POST'], [call[0] for call in writes])
         self.assertEqual({'ref': 'refs/tags/' + TAG, 'sha': SHA}, writes[0][2])
-        self.assertIs(writes[1][2]['draft'], True)
-        self.assertEqual(SHA, writes[1][2]['target_commitish'])
+        self.assertEqual({
+            'tag_name': TAG, 'name': TAG, 'draft': True,
+            'prerelease': False, 'generate_release_notes': True,
+        }, writes[1][2])
         self.assertEqual(self.archive.read_bytes(), writes[2][2])
+
+    def test_reserved_tag_release_creation_needs_no_workflows_permission(self):
+        """GitHub checks supplied target_commitish even when the tag exists."""
+        def contents_only_request(method, path, data=None, **kwargs):
+            if method == 'POST' and path == ROOT + '/releases':
+                if 'target_commitish' in data:
+                    raise self.publisher.ApiError(403, method, path)
+                # The omitted target is safe only after reserving and verifying our tag.
+                self.assertEqual(('POST', ROOT + '/git/refs', {
+                    'ref': 'refs/tags/' + TAG, 'sha': SHA,
+                }, {}), self.calls[-2])
+                self.assertEqual(('GET', ROOT + '/git/ref/tags/' + TAG, None, {}), self.calls[-1])
+            return self.request(method, path, data, **kwargs)
+
+        release = self.publisher.create_draft(contents_only_request, 'owner/repo', SHA,
+                                              '1.10.1', self.archive, self.digest, False)
+        self.assertEqual(7, release['id'])
+        self.assertFalse(any(method in ('PATCH', 'DELETE') for method, *_ in self.calls))
 
     def test_existing_published_and_draft_releases_fail_without_any_write(self):
         for draft in (False, True):
@@ -159,12 +179,13 @@ class PublishDraftTest(unittest.TestCase):
             status = 201
         client = self.publisher.GitHubClient('test-token')
         with mock.patch.object(self.publisher.urllib.request, 'urlopen', return_value=Response(b'{"id":7}')) as opened:
-            self.assertEqual({'id': 7}, client.request('POST', ROOT + '/releases', {'draft': True, 'target_commitish': SHA}))
+            self.assertEqual({'id': 7}, client.request('POST', ROOT + '/releases', {'draft': True, 'tag_name': TAG}))
         request = opened.call_args.args[0]
         self.assertEqual('https://api.github.com' + ROOT + '/releases', request.full_url)
         self.assertEqual('POST', request.method)
         self.assertIs(json.loads(request.data)['draft'], True)
-        self.assertEqual(SHA, json.loads(request.data)['target_commitish'])
+        self.assertEqual(TAG, json.loads(request.data)['tag_name'])
+        self.assertNotIn('target_commitish', json.loads(request.data))
         with mock.patch.object(self.publisher.urllib.request, 'urlopen', return_value=Response(b'{"id":8}')) as opened:
             client.request('POST', ROOT + '/releases/7/assets?name=' + self.archive.name, self.archive.read_bytes(), upload=True)
         request = opened.call_args.args[0]
