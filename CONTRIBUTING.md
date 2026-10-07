@@ -15,12 +15,12 @@ Ensure that you have the following tools installed on your machine:
 
 - Java development kit (JDK) 21
 - Node.js 24, Corepack, and pnpm 10.5.2 (for the pinned Biome test packages)
-- IntelliJ IDEA Ultimate Edition
+- WebStorm 2025.3 or a compatible IDE with the required Ultimate and JavaScript modules
 - git-cliff (_maintainers only_)
 
 1. Fork the repository and clone it to your local machine.
    ```shell
-   gh repo fork biomejs/biome-intellij --clone
+   gh repo fork denbezrukov/my-biome-intellij --clone
    ```
 
 2. Install Corepack and activate the test fixture package manager. Node.js 24 does not bundle Corepack.
@@ -32,7 +32,7 @@ Ensure that you have the following tools installed on your machine:
 
 ## Development
 
-The plugin can be started in IDEA by running the `runIde` Gradle task. This will start a new instance of IDEA with the
+The plugin can be started in WebStorm by running the `runIde` Gradle task. This will start a new instance of WebStorm with the
 plugin loaded.
 
 ```shell
