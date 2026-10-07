@@ -1,4 +1,6 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import java.io.File
+import java.security.MessageDigest
 
 val remoteRobotVersion = "0.11.21"
 val testPlatformKotlinVersion = "2.2.20"
@@ -106,6 +108,12 @@ tasks {
 
   test {
     useJUnitPlatform()
+    // Biome shares its daemon by cache directory, even across separate IDE test JVMs.
+    // Keep the socket path short enough for Unix domain sockets in deeply nested checkouts.
+    val cacheKey = MessageDigest.getInstance("SHA-256")
+      .digest(projectDir.absolutePath.toByteArray(Charsets.UTF_8))
+      .take(8).joinToString("") { "%02x".format(it) }
+    environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
   }
 }
 
