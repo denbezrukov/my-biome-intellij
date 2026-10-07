@@ -46,6 +46,11 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     },
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": {
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
+    },
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": {
         "testCopiedConfigStartsForAlreadyOpenFile",
         "testDeleteAndRecreateConfigStartsOnce",
@@ -159,6 +164,9 @@ REQUIRED_TESTS = {
         "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testCancellingNestedRecoveryStopsPendingVersionProbe",
+        "testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement",
+        "testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement",
         "testNestedRepairPreservesAnotherProjectServer",
         "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",
@@ -193,6 +201,10 @@ REQUIRED_TESTS = {
         "testTextAndLfFormattingUndoRedoRestoresBytes",
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
+    },
+    PACKAGE + "lsp.LegacyBiomeSharedDaemonLspTest": {
+        "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+        "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
     },
     PACKAGE + "lsp.BiomeSharedDaemonLspTest": {
         "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",

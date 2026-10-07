@@ -1,9 +1,15 @@
 package com.github.biomejs.intellijbiome.lsp
 
+import com.github.biomejs.intellijbiome.BiomePackage
+import com.github.biomejs.intellijbiome.BiomeTargetRun
+import com.github.biomejs.intellijbiome.BiomeTargetRunBuilder
+import com.github.biomejs.intellijbiome.ProcessCommandParameter
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.extensions.isBiomeConfigFile
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
+import com.intellij.execution.ExecutionException
+import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
@@ -11,6 +17,8 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -26,6 +34,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 
 /** Recovers unowned open files; established owners keep watching their own configuration. */
 @Service(Service.Level.PROJECT)
@@ -51,6 +63,10 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
         withTimeoutOrNull(30_000) {
             while (true) {
                 val request = readAction { discoveryRequest(configs) } ?: break
+                if (request.restart && !canRestart(request)) {
+                    delay(250)
+                    continue
+                }
                 val completed = withContext(Dispatchers.EDT) {
                     if (project.isDisposed || !BiomeSettings.getInstance(project).usesConfigDiscovery()) {
                         return@withContext true
@@ -58,7 +74,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
                     val manager = LspServerManager.getInstance(project)
                     val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toSet()
                     if (current != request.servers || captureInputs() != request.inputs ||
-                        current.any { it.state == LspServerState.Initializing }) {
+                        (request.restart && current.any { it.state == LspServerState.Initializing })) {
                         return@withContext false
                     }
                     if (request.restart) {
@@ -87,8 +103,9 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
         if (changedConfigs.isEmpty()) return null
         val servers = LspServerManager.getInstance(project)
             .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+        val fileIndex = ProjectFileIndex.getInstance(project)
         val uncovered = inputs.openFiles.filter { file ->
-            file.isValid && settings.fileSupported(file) &&
+            file.isValid && file.isInLocalFileSystem && fileIndex.isInContent(file) && settings.fileSupported(file) &&
                 changedConfigs.any { VfsUtilCore.isAncestor(it.parent, file, true) } &&
                 servers.none { it.descriptor.isSupportedFile(file) } &&
                 roots.any { root -> VfsUtilCore.isAncestor(root, file, true) && file.findNearestBiomeConfig(root) != null }
@@ -100,15 +117,76 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
         return DiscoveryRequest(servers.toSet(), blockedByAncestor, inputs)
     }
 
+    private suspend fun canRestart(request: DiscoveryRequest): Boolean {
+        try {
+            val candidates = readAction { restartCandidates(request) } ?: return false
+            return withContext(Dispatchers.IO) {
+                val verified = candidates.map { candidate ->
+                    val before = executableIdentity(candidate.executable)
+                    BiomePackage(project).versionNumber(candidate.probe)
+                    if (before != executableIdentity(candidate.executable)) return@withContext false
+                    candidate.executable to before
+                }
+                verified.all { (executable, identity) -> identity == executableIdentity(executable) }
+            }
+        } catch (_: ExecutionException) {
+            return false
+        } catch (_: IOException) {
+            return false
+        }
+    }
+
+    private fun restartCandidates(request: DiscoveryRequest): List<RestartCandidate>? {
+        if (project.isDisposed || captureInputs() != request.inputs ||
+            request.servers.any { it.state == LspServerState.Initializing }) return null
+        val settings = BiomeSettings.getInstance(project)
+        val index = ProjectFileIndex.getInstance(project)
+        val files = request.inputs.openFiles.filter {
+            it.isValid && it.isInLocalFileSystem && index.isInContent(it) && settings.fileSupported(it)
+        }
+        val biome = BiomePackage(project)
+        val selections = files.mapNotNull { file ->
+            val projectRoot = request.inputs.roots.firstOrNull { VfsUtilCore.isAncestor(it, file, true) }
+                ?: return@mapNotNull null
+            val root = file.findNearestBiomeConfig(projectRoot)?.parent ?: return@mapNotNull null
+            val executable = biome.binaryPath(root.path, file, false) ?: return null
+            root to executable
+        }.distinct()
+        // A public restart also removes unrelated live roots. Every active root must
+        // be reconstructable from its open files, using every executable they can select.
+        val rebuiltRoots = selections.map { it.first }.toSet()
+        if (request.servers.any { server ->
+            server.state == LspServerState.Running && files.any { server.descriptor.isSupportedFile(it) } &&
+                server.descriptor.roots.any { it !in rebuiltRoots }
+        }) return null
+        return selections.map { (root, executable) ->
+            RestartCandidate(executable, BiomeTargetRunBuilder(project).getBuilder(executable, root.path)
+                .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build())
+        }
+    }
+
+    private fun executableIdentity(executable: String): ExecutableIdentity {
+        val path = Path.of(executable).toRealPath()
+        return ExecutableIdentity(path, Files.size(path), Files.getLastModifiedTime(path))
+    }
+
+    private data class RestartCandidate(val executable: String, val probe: BiomeTargetRun)
+    private data class ExecutableIdentity(val realPath: Path, val size: Long, val modified: FileTime)
+    private data class InterpreterIdentity(val configuredReference: String, val resolvedReference: String?, val implementation: String?)
+
     // Compare cheap metadata on EDT; config parsing stays in the pooled read action.
     private fun captureInputs(): DiscoveryInputs {
         val settings = BiomeSettings.getInstance(project)
+        val interpreters = NodeJsInterpreterManager.getInstance(project)
+        val interpreter = interpreters.interpreter
         return DiscoveryInputs(
             VirtualFileManager.getInstance().modificationCount,
+            ProjectRootManager.getInstance(project).modificationCount,
             FileEditorManager.getInstance(project).openFiles.toSet(),
             project.getBaseDirectories().toSet(),
             settings.configurationMode, settings.configPath, settings.executablePath,
             settings.supportedExtensions.toSet(),
+            InterpreterIdentity(interpreters.interpreterRef.referenceName, interpreter?.referenceName, interpreter?.javaClass?.name),
         )
     }
 
@@ -120,11 +198,13 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
 
     private data class DiscoveryInputs(
         val vfsModificationCount: Long,
+        val projectRootsModificationCount: Long,
         val openFiles: Set<VirtualFile>,
         val roots: Set<VirtualFile>,
         val mode: ConfigurationMode,
         val configPath: String,
         val executablePath: String,
         val supportedExtensions: Set<String>,
+        val interpreter: InterpreterIdentity,
     )
 }

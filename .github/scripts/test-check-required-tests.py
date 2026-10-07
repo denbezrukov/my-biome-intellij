@@ -45,6 +45,11 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     ),
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": (
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
+    ),
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": (
         "testCopiedConfigStartsForAlreadyOpenFile",
         "testDeleteAndRecreateConfigStartsOnce",
@@ -158,6 +163,9 @@ REQUIRED_TESTS = {
         "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testCancellingNestedRecoveryStopsPendingVersionProbe",
+        "testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement",
+        "testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement",
         "testNestedRepairPreservesAnotherProjectServer",
         "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",
@@ -192,6 +200,10 @@ REQUIRED_TESTS = {
         "testTextAndLfFormattingUndoRedoRestoresBytes",
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
+    ),
+    PACKAGE + "lsp.LegacyBiomeSharedDaemonLspTest": (
+        "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+        "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
     ),
     PACKAGE + "lsp.BiomeSharedDaemonLspTest": (
         "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
@@ -275,7 +287,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("189 required tests across 22 classes", result.stdout)
+            self.assertIn("197 required tests across 24 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
