@@ -78,6 +78,13 @@ class BiomeSettings :
         return configurationMode !== ConfigurationMode.DISABLED
     }
 
+    /** Blank manual overrides use the same config discovery as Automatic mode. */
+    internal fun usesConfigDiscovery(): Boolean = when (configurationMode) {
+        ConfigurationMode.AUTOMATIC -> true
+        ConfigurationMode.MANUAL -> configPath.isEmpty()
+        ConfigurationMode.DISABLED -> false
+    }
+
     fun fileSupported(file: VirtualFile): Boolean {
         val fileExtension = file.extension
         return if (fileExtension != null) {

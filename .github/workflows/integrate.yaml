@@ -46,6 +46,7 @@ jobs:
           --tests '*BiomeLanguageRoutingTest'
           --tests '*BiomeManualConfigCliTest'
           --tests '*BiomeManualConfigLspTest'
+          --tests '*BiomeManualConfigRecoveryLspTest'
           --tests '*BiomeManualConfigV1LspTest'
           --tests '*BiomeNestedRootsLspTest'
           --tests '*BiomeSaveActionsTest'
