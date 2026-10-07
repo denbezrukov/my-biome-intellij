@@ -13,11 +13,19 @@ import xml.etree.ElementTree as ET
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
     PACKAGE + "lsp.BiomeDependencyRefreshLifecycleTest": {
+        "testBrokenProspectivePackagePreservesServerDuringOriginalUpgrade",
         "testChangedPrereleaseIsAdoptedOnce",
         "testClosedFailedRootDoesNotBlockHealthyRootUpgrade",
+        "testClosedParentDoesNotBlockNestedRootUpgrade",
+        "testClosedStartupFileRetainsSameRootPackageSelection",
+        "testDeletedStartupFileRetainsPackageDiscoveryContext",
         "testInterpreterChangeDuringProbePreservesWorkingServer",
+        "testMalformedOpenRootWithNonRootFallbackStillBlocksUnsafeRestart",
+        "testNestedPackageWithinOneConfigRootKeepsFileSpecificSelection",
         "testReopenedIdleRootIsVerifiedBeforeProjectRestart",
         "testSupersedingInstallEventInvalidatesSuccessfulOlderProbeImmediately",
+        "testTwoPackagesInOneRootDoNotChangeStartupSelection",
+        "testUnchangedNestedRootVersionsKeepBothServers",
         "testUnchangedPrereleaseDoesNotRestart",
     },
     PACKAGE + "lsp.BiomeDependencyUpgradeLspTest": {

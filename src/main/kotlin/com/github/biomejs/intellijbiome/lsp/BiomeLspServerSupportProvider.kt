@@ -64,7 +64,7 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         // Select the executable here; the platform probes it during pooled server startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
         project.service<BiomeDependencyRefreshService>()
-        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath))
+        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath, file.parent))
     }
 
     override fun createLspServerWidgetItem(lspServer: LspServer,
@@ -77,7 +77,10 @@ internal class BiomeLspServerDescriptor(
     root: VirtualFile,
     val executable: String,
     private val configPath: String?,
+    val packageContext: VirtualFile,
 ) : LspServerDescriptor(project, "Biome", root) {
+    // Preserve package discovery when the startup file is closed, renamed or deleted.
+    val packageContextPath = packageContext.path
     private val executionContext = BiomeTargetRunBuilder(project)
     private val probeRun = executionContext.getBuilder(executable, root.path)
         .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
