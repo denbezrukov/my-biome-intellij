@@ -30,7 +30,7 @@ This version prepares the fork's combined changes for GitHub artifact review. It
 
 ### Scope and distribution
 
-- Minimum IDE build is 253 (2025.3); JDK 21 and Kotlin 2.2.20 remain pinned for development.
+- Admitted IDE build range is 253 (2025.3) through 262.* (2026.2), with complete required gates on both exact WebStorm targets. EAP263 remains outside the admitted range pending runtime validation. JDK 21 and Kotlin 2.2.20 remain pinned for development.
 - Fork installation uses a verified GitHub ZIP. Upstream plugin ID/vendor attribution is preserved; the upstream Marketplace listing is separate.
 - Linux is the actual runtime validation platform. Windows/WSL runtime and remote configuration mapping remain held. Default SVG routing, watcher controls, dynamic nested-root topology changes, and additional IDE product coverage remain outside this release's scope.
 
