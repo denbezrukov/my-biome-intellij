@@ -50,10 +50,14 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 170 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 173 named
 tests across 23 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
 same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
 reports even when Gradle fails.
+
+The launcher inventory includes `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
+`testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`. Both require the native Node handler to finish while
+an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 

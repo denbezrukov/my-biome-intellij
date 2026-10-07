@@ -7,6 +7,8 @@ import com.intellij.javascript.nodejs.execution.NodeTargetRunOptions.Companion.o
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreter
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.io.BaseDataReader
+import com.intellij.util.io.BaseOutputReader
 import java.nio.charset.Charset
 
 class NodeProcessCommandBuilder(
@@ -14,7 +16,14 @@ class NodeProcessCommandBuilder(
     interpreter: NodeJsInterpreter,
 ) : ProcessCommandBuilder {
 
-    private val target = NodeTargetRun(interpreter, project, null, of(false))
+    private val target = NodeTargetRun(interpreter, project, null, of(false, null) {
+        // A proxy's daemon may retain its pipes after the proxy exits. Let the native
+        // readers finish without killing that shared daemon or changing CRLF output.
+        it.processReaderOptions = object : BaseOutputReader.Options() {
+            override fun policy() = BaseDataReader.SleepingPolicy.NON_BLOCKING
+            override fun splitToLines() = false
+        }
+    })
     private val builder = target.commandLineBuilder
     private var executable: String? = null
     private var workingDir: String? = null
