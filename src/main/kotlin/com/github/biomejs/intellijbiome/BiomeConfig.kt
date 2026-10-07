@@ -3,12 +3,14 @@ package com.github.biomejs.intellijbiome
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonTransformingSerializer
 import kotlinx.serialization.json.decodeFromStream
+import java.io.IOException
 
 @Serializable
 data class BiomeConfig(
@@ -30,8 +32,18 @@ data class BiomeConfig(
             }
 
             return try {
-               return json.decodeFromStream(file.inputStream)
-            } catch (_: Throwable) {
+                file.inputStream.use { stream ->
+                    // Resolve expected decoding failures before close, so close-time
+                    // cancellation or fatal failures cannot be suppressed beneath them.
+                    try {
+                        json.decodeFromStream<BiomeConfig>(stream)
+                    } catch (_: SerializationException) {
+                        null
+                    } catch (_: IOException) {
+                        null
+                    }
+                }
+            } catch (_: IOException) {
                 null
             }
         }
