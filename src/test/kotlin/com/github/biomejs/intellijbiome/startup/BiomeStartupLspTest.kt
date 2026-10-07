@@ -6,6 +6,8 @@ import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.github.biomejs.intellijbiome.fixtures.StartupProbeProcess
 import com.github.biomejs.intellijbiome.BiomePackage
 import com.github.biomejs.intellijbiome.BiomeTargetRunBuilder
+import com.github.biomejs.intellijbiome.BiomeTargetRun
+import com.intellij.execution.configurations.GeneralCommandLine
 import com.github.biomejs.intellijbiome.ProcessCommandParameter
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterRef
@@ -25,6 +27,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
 import java.nio.file.StandardCopyOption
 import com.intellij.platform.lsp.api.LspServerState
 
@@ -200,6 +204,47 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         } finally {
             manager.stopServers(BiomeLspServerSupportProvider::class.java)
             if (Files.exists(pid)) ProcessHandle.of(Files.readString(pid).toLong()).ifPresent { it.destroyForcibly() }
+        }
+    }
+
+    fun testStopDuringFinalProcessCreationDoesNotLoseProcessOwnership() {
+        val file = myFixture.addFileToProject("index.js", "let value = 1;").virtualFile
+        BiomeLspServerSupportProvider().fileOpened(project, file, starter)
+        val descriptor = descriptors.single()
+        val created = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val child = AtomicReference<Process>()
+        val command = object : GeneralCommandLine("/bin/sleep", "60") {
+            override fun createProcess(): Process {
+                val process = super.createProcess()
+                child.set(process)
+                created.countDown()
+                check(release.await(5, TimeUnit.SECONDS)) { "Final process creation was not released" }
+                return process
+            }
+        }
+        // Exercise the real descriptor with a controlled command factory; no production test hook.
+        descriptor.javaClass.getDeclaredField("targetRun").apply { isAccessible = true }
+            .set(descriptor, BiomeTargetRun.General(command))
+        val manager = LspServerManager.getInstance(project)
+        manager.ensureServerStarted(BiomeLspServerSupportProvider::class.java, descriptor)
+        try {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (created.count != 0L && System.nanoTime() < deadline) {
+                UIUtil.dispatchAllInvocationEvents()
+                Thread.sleep(10)
+            }
+            assertEquals("The final server process factory was not entered", 0L, created.count)
+            val server = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
+            manager.stopServers(BiomeLspServerSupportProvider::class.java)
+            release.countDown()
+            assertTrue("Cancellation lost the newly created server process before SDK handoff", child.get().waitFor(2, TimeUnit.SECONDS))
+            assertFalse(child.get().isAlive)
+            assertEquals(LspServerState.ShutdownNormally, server.state)
+        } finally {
+            release.countDown()
+            child.get()?.let { it.destroyForcibly(); it.waitFor(1, TimeUnit.SECONDS) }
+            manager.stopServers(BiomeLspServerSupportProvider::class.java)
         }
     }
 

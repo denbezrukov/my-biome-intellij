@@ -34,6 +34,9 @@ fun runProcessFuture(handler: OSProcessHandler): CompletableFuture<ProcessResult
 /** Node target handlers default to soft SIGINT; use their target-aware tree kill first. */
 fun terminateProbeProcess(handler: OSProcessHandler) {
     if (!handler.process.isAlive) return
+    // A cancelled descriptor may still own a handler that the SDK has not notified yet.
+    // General handlers defer destroyProcess until start notification.
+    if (!handler.isStartNotified) handler.startNotify()
     if (handler is KillableProcess && handler.canKillProcess()) {
         handler.killProcess()
     } else {

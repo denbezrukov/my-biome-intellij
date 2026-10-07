@@ -2,6 +2,7 @@ package com.github.biomejs.intellijbiome.lsp
 
 import com.github.biomejs.intellijbiome.*
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
+import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.execution.configurations.GeneralCommandLine
@@ -33,6 +34,7 @@ import kotlinx.coroutines.CancellationException
 import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.ConfigurationItem
 import org.eclipse.lsp4j.Diagnostic
+import java.util.concurrent.TimeUnit
 
 
 class BiomeLspServerSupportProvider : LspServerSupportProvider {
@@ -99,28 +101,45 @@ private class BiomeLspServerDescriptor(
                 .find { it.descriptor === this }
         }) ?: throw ProcessCanceledException()
         val lifetime = Disposer.newDisposable("Biome startup probe")
+        var pendingHandler: OSProcessHandler? = null
         return try {
-            runBlocking {
-                val startupJob = currentCoroutineContext().job
-                manager.addLspServerManagerListener(object : LspServerManagerListener {
-                    override fun serverStateChanged(lspServer: LspServer) {
-                        if (lspServer === server && isStopped(lspServer)) {
-                            startupJob.cancel(CancellationException("Biome server startup was stopped"))
+            val handler = try {
+                runBlocking {
+                    val startupJob = currentCoroutineContext().job
+                    manager.addLspServerManagerListener(object : LspServerManagerListener {
+                        override fun serverStateChanged(lspServer: LspServer) {
+                            if (lspServer === server && isStopped(lspServer)) {
+                                startupJob.cancel(CancellationException("Biome server startup was stopped"))
+                            }
                         }
-                    }
-                }, lifetime, false)
-                // Check after subscribing so a stop between the lookup and registration is observed.
-                if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
-                val version = BiomePackage(project).versionNumber(probeRun)
-                currentCoroutineContext().ensureActive()
-                ProgressManager.checkCanceled()
-                if (project.isDisposed) throw ProcessCanceledException()
-                if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
-                // Backward compatibility for v1; `--config-path` is no longer available in v2.
-                (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
+                    }, lifetime, false)
+                    // Check after subscribing so a stop between the lookup and registration is observed.
+                    if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
+                    val version = BiomePackage(project).versionNumber(probeRun)
+                    currentCoroutineContext().ensureActive()
+                    ProgressManager.checkCanceled()
+                    if (project.isDisposed) throw ProcessCanceledException()
+                    if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
+                    // Backward compatibility for v1; `--config-path` is no longer available in v2.
+                    (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
+                        .also { pendingHandler = it }
+                }
+            } finally {
+                Disposer.dispose(lifetime)
             }
+            // Until runBlocking returns successfully, cancellation can discard its result.
+            // The SDK connector takes ownership only after this method returns.
+            pendingHandler = null
+            handler
         } finally {
-            Disposer.dispose(lifetime)
+            pendingHandler?.let { handler ->
+                terminateProbeProcess(handler)
+                try {
+                    handler.process.waitFor(1_000, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
         }
     }
 
