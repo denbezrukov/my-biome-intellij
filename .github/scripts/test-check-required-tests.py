@@ -128,16 +128,24 @@ REQUIRED_TESTS = {
     ),
     PACKAGE + "lsp.BiomeNestedRootsLspTest": (
         "testChildFirstPublicRestartRestoresBothWorkspaces",
+        "testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace",
         "testChildThenParentIdeFormattingUsesChildServer",
         "testChildThenParentServiceFormattingUsesChildServer",
+        "testDisabledModeDoesNotRecoverNestedConfig",
         "testExplicitManualConfigRetainsProjectWideOwnership",
         "testMalformedEstablishedChildKeepsExclusiveOwnership",
         "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
+        "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testNestedRepairPreservesAnotherProjectServer",
+        "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",
         "testParentThenChildIdeFormattingUsesChildServer",
         "testParentThenChildServiceFormattingUsesChildServer",
+        "testRepairAfterDependencyRefreshRestoresIndependentWorkspace",
+        "testRepairAfterMalformedChildRestartRestoresIndependentWorkspace",
+        "testRepairWithoutRestartControlRestoresIndependentWorkspace",
     ),
     PACKAGE + "lsp.BiomeSaveActionsTest": (
         "testCancellationBeforeWriteDoesNotMutate",
@@ -246,7 +254,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("162 required tests across 21 classes", result.stdout)
+            self.assertIn("170 required tests across 21 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

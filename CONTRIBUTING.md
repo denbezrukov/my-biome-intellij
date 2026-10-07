@@ -50,9 +50,23 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 162 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 170 named
 tests across 21 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
+
+The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressions:
+
+- `testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace`
+- `testDisabledModeDoesNotRecoverNestedConfig`
+- `testManualModeDoesNotRecoverNestedConfig`
+- `testNestedRepairPreservesAnotherProjectServer`
+- `testNewIndependentChildConfigRecoversUnownedEditor`
+- `testRepairAfterDependencyRefreshRestoresIndependentWorkspace`
+- `testRepairAfterMalformedChildRestartRestoresIndependentWorkspace`
+- `testRepairWithoutRestartControlRestoresIndependentWorkspace`
+
+They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
+config-event bursts, and project/mode isolation. Config removal and reparenting remain separate lifecycle work.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
