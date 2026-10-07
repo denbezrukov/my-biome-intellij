@@ -47,6 +47,7 @@ jobs:
           --tests '*BiomeManualConfigLspTest'
           --tests '*BiomeManualConfigV1LspTest'
           --tests '*BiomeNestedRootsLspTest'
+          --tests '*BiomeManualActionsTest'
           --tests '*BiomeSaveActionsTest'
           --tests '*BiomeSharedDaemonLspTest'
           --tests '*OlderBiomeLanguageLspTest'
