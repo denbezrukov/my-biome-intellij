@@ -26,7 +26,6 @@ import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerDescriptor
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
 import kotlin.io.path.Path
@@ -36,7 +35,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.ConfigurationItem
-import org.eclipse.lsp4j.Diagnostic
 import java.util.concurrent.TimeUnit
 
 
@@ -226,13 +224,7 @@ internal class BiomeLspServerDescriptor(
         }
     }
 
-    override val lspDiagnosticsSupport = object : LspDiagnosticsSupport() {
-        override fun getMessage(diagnostic: Diagnostic) =
-            "Biome: ${diagnostic.message} (${diagnostic.code.left})"
-
-        override fun getTooltip(diagnostic: Diagnostic) =
-            getMessage(diagnostic)
-    }
+    override val lspDiagnosticsSupport = BiomeDiagnosticsSupport()
 
     override val clientCapabilities: ClientCapabilities
         get() = super.clientCapabilities.apply {

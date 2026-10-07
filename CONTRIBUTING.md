@@ -44,18 +44,19 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeDiagnosticsTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 167 named
-tests across 22 classes to execute without failures or skips. The CI
-job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
-`testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
-`testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
-to finish while an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output. Packaging remains a separate `./gradlew buildPlugin` job.
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 173 named
+tests across 23 classes to execute without failures or skips. The CI
+job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
+
+The launcher inventory includes `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
+`testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`. Both require the native Node handler to finish while
+an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output.
 
 The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
 pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
@@ -74,6 +75,13 @@ upstream first-open registration race. The 2.5.15 cases retain full replacement 
 and formatting assertions.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
+
+Diagnostic coverage includes absent, string, integer and zero codes; multiline and HTML-sensitive
+messages/tooltips; real Biome highlighting and an applied parameter quick fix.
+`BiomeDiagnosticsTest.testRuntimeMessageRepresentationsKeepTheirText` exercises the running SDK's
+string representation and both plaintext/markdown `MarkupContent` where the SDK accepts it
+(the tested 263 SDK). Markup is preserved as readable, escaped text; rich Markdown rendering is not promised.
+Run this suite on the minimum, current stable and newest supported SDK when changing diagnostic APIs.
 
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 
