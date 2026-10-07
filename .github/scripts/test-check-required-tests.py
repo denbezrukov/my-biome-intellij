@@ -11,6 +11,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "launcher.BiomeLauncherLspTest": (
+        "testVersion1DescriptorPreservesSelectedLauncherAndConfig",
+        "testVersion2DescriptorPreservesSelectedLauncherAndConfig",
+    ),
+    PACKAGE + "launcher.BiomeLauncherTest": (
+        "testCancellingNodeLauncherCollectionTerminatesItsProcess",
+        "testEnvironmentSettingShebangIsNotStripped",
+        "testManualLauncherKeepsSelectedTarget",
+        "testNativeDoesNotRequireConfiguredNodeInterpreter",
+        "testNativeWithJavaScriptSuffixStillRunsDirectly",
+        "testNodeScriptPreservesWorkingDirectoryArgumentsAndEnvironment",
+        "testNpmLauncherPreservesBiomeBinaryOverride",
+        "testShellWrapperKeepsItsEnvironmentSetup",
+        "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
+        "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
+    ),
     PACKAGE + "lsp.BiomeManualConfigCliTest": (
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
@@ -94,7 +110,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("38 required tests across 7 classes", result.stdout)
+            self.assertIn("50 required tests across 9 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
