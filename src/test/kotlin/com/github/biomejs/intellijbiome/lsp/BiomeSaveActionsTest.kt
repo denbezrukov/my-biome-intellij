@@ -278,7 +278,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
 
     fun testSavePreservesCrLfBytes() = checkLineSeparators("crlf", "\r\n")
 
-    fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n")
+    fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n", moveCaretBeforeRedo = true)
 
     fun testLfOnlyEditPersists() = checkSeparatorOnlyEdit("\r\n", "\n")
 
@@ -433,7 +433,16 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
         Files.setLastModifiedTime(path, FileTime.fromMillis(timestamp + 10_000))
     }
 
-    private fun checkSeparatorOnlyEdit(originalSeparator: String, requestedSeparator: String, earlierEdit: Boolean = false) {
+    private fun checkSeparatorOnlyEdit(
+        originalSeparator: String,
+        requestedSeparator: String,
+        earlierEdit: Boolean = false,
+        moveCaretBeforeRedo: Boolean = false,
+    ) {
+        // This control checks document undo groups. Native caret restoration can
+        // consume a redo without applying that group; make caret motion transparent.
+        com.intellij.openapi.util.registry.Registry.get("ide.undo.transparent.caret.movement")
+            .setValue(true, testRootDisposable)
         val document = openDocuments().last()
         val file = FileDocumentManager.getInstance().getFile(document)!!
         val formatted = "const value = 1;\nconsole.log(value);\n"
@@ -472,6 +481,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
         assertEquals("Undo must preserve normalized editor text", formatted, document.text)
         assertEquals(formatted.replace("\n", originalSeparator), diskText(document))
         assertTrue(undo.isRedoAvailable(editor))
+        if (moveCaretBeforeRedo) myFixture.editor.caretModel.moveToOffset(formatted.length - 1)
         undo.redo(editor)
         assertEquals(formatted, document.text)
         assertEquals(formatted.replace("\n", requestedSeparator), diskText(document))
