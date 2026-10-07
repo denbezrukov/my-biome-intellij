@@ -27,7 +27,14 @@ import kotlin.coroutines.coroutineContext
 import java.nio.file.Paths
 
 
-private val versionRegex: Regex = Regex("\\d{1,2}\\.\\d{1,2}\\.\\d{1,3}")
+private const val semverNumber = "(?:0|[1-9]\\d*)"
+private const val prereleaseIdentifier = "(?:0|[1-9]\\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+// Keep the full CLI version, including prerelease/build identity used by serverInfo.version.
+private val versionRegex = Regex(
+    "(?<![0-9A-Za-z_.+-])$semverNumber\\.$semverNumber\\.$semverNumber" +
+        "(?:-$prereleaseIdentifier(?:\\.$prereleaseIdentifier)*)?" +
+        "(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?![0-9A-Za-z_.+-])"
+)
 
 class BiomePackage(private val project: Project) {
     private val packageName = "@biomejs/biome"
