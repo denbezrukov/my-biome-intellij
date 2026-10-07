@@ -14,6 +14,7 @@ import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileCopyEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.platform.lsp.api.LspServerManager
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,9 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
-                    val configs = events.mapNotNull { it.file }
+                    val configs = events.mapNotNull { event ->
+                        if (event is VFileCopyEvent) event.findCreatedFile() else event.file
+                    }
                         .filter { it.isValid && it.isBiomeConfigFile() }.distinct()
                     if (configs.isEmpty() || project.isDisposed) return
                     scope.launch {

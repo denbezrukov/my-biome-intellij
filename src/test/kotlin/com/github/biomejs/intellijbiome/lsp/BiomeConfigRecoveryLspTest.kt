@@ -7,6 +7,7 @@ import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.lang.javascript.modules.TestNpmPackage
 import com.intellij.lang.javascript.modules.TestNpmPackageInstaller
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.VfsUtil
@@ -54,6 +55,16 @@ class BiomeConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
         settleWithoutServer()
         externalConfig(config)
         assertFormatting()
+    }
+
+    fun testCopiedConfigStartsForAlreadyOpenFile() {
+        val draft = myFixture.tempDirFixture.createFile("draft.json", config)
+        openSource()
+        val editor = myFixture.editor
+        settleWithoutServer()
+        WriteAction.run<RuntimeException> { draft.copy(this, root, "biome.json") }
+        assertFormatting()
+        assertSame("Copy recovery must retain the already open editor", editor, myFixture.editor)
     }
 
     fun testMalformedConfigRepairStartsForAlreadyOpenFile() {
