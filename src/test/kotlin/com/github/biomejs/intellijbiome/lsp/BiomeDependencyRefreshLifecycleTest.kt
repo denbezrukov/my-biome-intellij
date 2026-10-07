@@ -174,8 +174,15 @@ class BiomeDependencyRefreshLifecycleTest : BiomeLspFixtureTestCase() {
         val original = open(outer)
         myFixture.configureFromExistingVirtualFile(nested.source)
         waitUntilFileOpenedByLspServer(project, nested.source, timeout = 15)
-        nested = firstOpenFile(nested)
-        if (closeOrigin) FileEditorManager.getInstance(project).closeFile(outer.source)
+        if (closeOrigin) {
+            val editors = FileEditorManager.getInstance(project)
+            editors.closeFile(outer.source)
+            // Only the nested file participates in a restart after the startup file closes.
+            // Do not depend on the two-file HashMap order before closing that file.
+            assertEquals(listOf(nested.source), editors.openFiles.toList())
+        } else {
+            nested = firstOpenFile(nested)
+        }
         if (deleteOrigin) {
             WriteAction.run<RuntimeException> { outer.source.delete(this) }
             assertFalse(outer.source.isValid)
@@ -234,23 +241,38 @@ class BiomeDependencyRefreshLifecycleTest : BiomeLspFixtureTestCase() {
 
     private fun firstOpenFile(root: Root): Root {
         val editors = FileEditorManager.getInstance(project)
-        var selected = root
-        // The SDK test editor manager exposes HashMap order, not tab-opening order.
-        // Select real files until its public snapshot has the regression's nested-first order.
-        for (attempt in 1..32) {
-            if (editors.openFiles.firstOrNull() == selected.source) break
-            editors.closeFile(selected.source)
-            val source = WriteAction.compute<VirtualFile, RuntimeException> {
-                root.directory.createChildData(this, "ordered-$attempt.js").apply {
+        val originalServers = servers().toSet()
+        val other = editors.openFiles.single { it != root.source }
+        assertEquals(setOf(root.source, other), editors.openFiles.toSet())
+        // TestEditorManagerImpl returns a default HashMap's key order. With at most
+        // three open files its table has 16 buckets, and VirtualFile hashes are VFS IDs.
+        // A batch spanning two bucket cycles covers every bucket even across hash-spread
+        // boundaries. Create it in one write action, before editor events allocate other IDs.
+        val bucketCount = 16
+        fun bucket(file: VirtualFile): Int = (file.hashCode() xor (file.hashCode() ushr 16)) and (bucketCount - 1)
+        val candidates = WriteAction.compute<List<VirtualFile>, RuntimeException> {
+            (1..bucketCount * 2).map { index ->
+                root.directory.createChildData(this, "ordered-$index.js").apply {
                     setBinaryContent("const value=1;\n".toByteArray())
                 }
             }
-            selected = Root(root.directory, source)
-            myFixture.configureFromExistingVirtualFile(selected.source)
-            waitUntilFileOpenedByLspServer(project, selected.source, timeout = 15)
         }
-        assertEquals("The actual SDK snapshot must put the nested file first", selected.source, editors.openFiles.first())
-        return selected
+        assertEquals("Real candidate files must cover the SDK editor map's buckets",
+            (0 until bucketCount).toSet(), candidates.map(::bucket).toSet())
+        val source = candidates.first { bucket(it) == bucket(other) }
+        myFixture.configureFromExistingVirtualFile(source)
+        waitUntilFileOpenedByLspServer(project, source, timeout = 15)
+        editors.closeFile(root.source)
+        // Equal-bucket insertion order is deterministic, including when the outer file
+        // occupies bucket zero. Reinsert it through the public API without replacing a server.
+        editors.closeFile(other)
+        editors.openFile(other, false)
+        waitUntilFileOpenedByLspServer(project, other, timeout = 15)
+        assertEquals("The actual SDK snapshot must contain exactly nested then outer",
+            listOf(source, other), editors.openFiles.toList())
+        assertEquals("Ordering the editors must preserve the established servers", originalServers, servers().toSet())
+        originalServers.forEach { assertEquals(LspServerState.Running, it.state) }
+        return Root(root.directory, source)
     }
 
     private fun executable(root: Root) = root.directory.toNioPath().resolve("node_modules/@biomejs/biome/bin/biome").toString()
