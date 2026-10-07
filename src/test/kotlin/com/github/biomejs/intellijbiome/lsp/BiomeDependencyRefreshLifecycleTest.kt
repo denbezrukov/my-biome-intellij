@@ -174,8 +174,15 @@ class BiomeDependencyRefreshLifecycleTest : BiomeLspFixtureTestCase() {
         val original = open(outer)
         myFixture.configureFromExistingVirtualFile(nested.source)
         waitUntilFileOpenedByLspServer(project, nested.source, timeout = 15)
-        nested = firstOpenFile(nested)
-        if (closeOrigin) FileEditorManager.getInstance(project).closeFile(outer.source)
+        if (closeOrigin) {
+            val editors = FileEditorManager.getInstance(project)
+            editors.closeFile(outer.source)
+            // Only the nested file participates in a restart after the startup file closes.
+            // Do not depend on the two-file HashMap order before closing that file.
+            assertEquals(listOf(nested.source), editors.openFiles.toList())
+        } else {
+            nested = firstOpenFile(nested)
+        }
         if (deleteOrigin) {
             WriteAction.run<RuntimeException> { outer.source.delete(this) }
             assertFalse(outer.source.isValid)
