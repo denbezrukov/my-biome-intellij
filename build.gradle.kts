@@ -1,9 +1,15 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.TestIdeTask
 import java.io.File
 import java.security.MessageDigest
 
 val remoteRobotVersion = "0.11.21"
 val testPlatformKotlinVersion = "2.2.20"
+val minimumIdeBuild = "WS-253.28294.332"
+val currentIdeVersion = "2026.2.3"
+val currentIdeBuild = "WS-262.10968.77"
 
 plugins {
   id("java") // Java support
@@ -77,6 +83,7 @@ intellijPlatform {
 
     ideaVersion {
       sinceBuild = providers.gradleProperty("pluginSinceBuild")
+      untilBuild = providers.gradleProperty("pluginUntilBuild")
     }
   }
 
@@ -95,8 +102,34 @@ intellijPlatform {
   }
 
   pluginVerification {
+    failureLevel = listOf(
+      VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+      VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+      VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+      VerifyPluginTask.FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
+    )
     ides {
-      recommended()
+      val minimumPath = providers.gradleProperty("minimumIdePath")
+      if (minimumPath.isPresent) local(minimumPath.get())
+      else create(IntelliJPlatformType.WebStorm, "2025.3") { useInstaller = false }
+      val currentPath = providers.gradleProperty("currentIdePath")
+      if (currentPath.isPresent) local(currentPath.get())
+      else create(IntelliJPlatformType.WebStorm, currentIdeVersion)
+    }
+  }
+}
+
+// Test targets must never change the SDK used to compile the publishable plugin.
+val requireMinimumCompileSdk by tasks.registering {
+  val platformType = providers.gradleProperty("platformType")
+  val platformVersion = providers.gradleProperty("platformVersion")
+  val sinceBuild = providers.gradleProperty("pluginSinceBuild")
+  inputs.property("platformType", platformType)
+  inputs.property("platformVersion", platformVersion)
+  inputs.property("pluginSinceBuild", sinceBuild)
+  doLast {
+    require(platformType.get() == "WS" && platformVersion.get() == "2025.3" && sinceBuild.get() == "253") {
+      "Compatibility/release artifacts must compile against WS 2025.3 (253); select a test runtime with currentIdePath."
     }
   }
 }
@@ -114,10 +147,44 @@ tasks {
       .digest(projectDir.absolutePath.toByteArray(Charsets.UTF_8))
       .take(8).joinToString("") { "%02x".format(it) }
     environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
+    systemProperty("biome.test.expected.build", minimumIdeBuild)
+    systemProperty("biome.test.compile.build", minimumIdeBuild)
   }
+  buildPlugin { dependsOn(requireMinimumCompileSdk) }
+  verifyPlugin { dependsOn(requireMinimumCompileSdk) }
 }
 
 intellijPlatformTesting {
+  testIde {
+    register("testCurrentIde") {
+      type = IntelliJPlatformType.WebStorm
+      version = currentIdeVersion
+      providers.gradleProperty("currentIdePath").orNull?.let { localPath = file(it) }
+      // Pin the closest platform framework below the WS build explicitly. The
+      // extension's implicit framework version otherwise uses the compile SDK.
+      testFramework(TestFrameworkType.Platform, "262.10968.67")
+      plugins {
+        bundledPlugins(providers.gradleProperty("platformBundledPlugins").get().split(',') + listOf(
+          "intellij.testRunner.plugin", "intellij.structureView.plugin", "com.intellij.modules.json", "NodeJS",
+          "com.intellij.modules.jcef", "intellij.libraries.misc.plugin", "intellij.ssh.plugin",
+          "intellij.bookmarks.plugin", "com.intellij.platform.images",
+        ))
+      }
+      task {
+        dependsOn(requireMinimumCompileSdk)
+        useJUnitPlatform()
+        systemProperty("biome.test.expected.build", currentIdeBuild)
+        systemProperty("biome.test.compile.build", minimumIdeBuild)
+        // TestIde flattens plugin libraries into the IDE classloader. Use the
+        // target SDK's stdlib (in util-8.jar), as the installed plugin does.
+        // Keep compilation and the publishable ZIP on the minimum dependencies.
+        val cacheKey = MessageDigest.getInstance("SHA-256")
+          .digest("${projectDir.absolutePath}:current".toByteArray(Charsets.UTF_8))
+          .take(8).joinToString("") { "%02x".format(it) }
+        environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
+      }
+    }
+  }
   runIde {
     register("runIdeForUiTests") {
       task {
@@ -142,4 +209,8 @@ intellijPlatformTesting {
       }
     }
   }
+}
+
+tasks.withType<TestIdeTask>().configureEach {
+  classpath = classpath.filter { !it.name.startsWith("kotlin-stdlib") }
 }

@@ -568,18 +568,42 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
             WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
             saveAndAwaitCompletion(myFixture, listOf(document))
             assertNotNull(beforeBiome.get())
-            assertFalse("2025.3 must finish its legacy IDE formatter before Biome starts", input == beforeBiome.get())
+            val modernFormatter = com.intellij.ide.actionsOnSave.impl.ActionsOnSaveFileDocumentManagerListener
+                .DocumentUpdatingActionOnSave::class.java.isAssignableFrom(
+                    Class.forName("com.intellij.codeInsight.actions.onSave.FormatOnSaveAction"))
+            if (modernFormatter) {
+                assertEquals("The document-updating IDE formatter follows the declared Biome-first order", input, beforeBiome.get())
+            } else {
+                assertFalse("253 must finish its legacy IDE formatter before Biome starts", input == beforeBiome.get())
+            }
             assertEquals(listOf("fix", "imports", "format"), requests.toList())
-            val saved = "// format\n// imports\n// fix\n" + beforeBiome.get()
+            val biomeOutput = "// format\n// imports\n// fix\n" + beforeBiome.get()
+            val saved = if (modernFormatter) {
+                WriteCommandAction.runWriteCommandAction(project, com.intellij.openapi.util.Computable {
+                    val copy = com.intellij.psi.PsiFileFactory.getInstance(project)
+                        .createFileFromText("native-control.js", myFixture.file.fileType, biomeOutput)
+                    com.intellij.psi.codeStyle.CodeStyleManager.getInstance(project).reformat(copy).text
+                }).also { assertFalse("The modern IDE formatter must change the Biome output control", it == biomeOutput) }
+            } else biomeOutput
             assertEquals(saved, document.text)
             assertEquals(saved, diskText(document))
             val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
             val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
             assertTrue(undo.isUndoAvailable(editor))
             undo.undo(editor)
+            if (modernFormatter) {
+                assertEquals("The first undo reverses only the later native formatter", biomeOutput, document.text)
+                assertTrue(undo.isUndoAvailable(editor))
+                undo.undo(editor)
+            }
             assertEquals("All Biome feature edits must be one undo group", beforeBiome.get(), document.text)
             assertTrue(undo.isRedoAvailable(editor))
             undo.redo(editor)
+            if (modernFormatter) {
+                assertEquals("The first redo restores the complete Biome feature group", biomeOutput, document.text)
+                assertTrue(undo.isRedoAvailable(editor))
+                undo.redo(editor)
+            }
             assertEquals(saved, document.text)
             assertEquals("Undo/redo must not restart Biome", 3, requests.size)
         } finally {

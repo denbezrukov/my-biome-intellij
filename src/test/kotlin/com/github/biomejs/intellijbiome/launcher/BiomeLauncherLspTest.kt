@@ -16,7 +16,6 @@ import com.intellij.testFramework.fixtures.CodeInsightFixtureTestCase
 import com.intellij.testFramework.fixtures.ModuleFixture
 import com.intellij.util.EnvironmentUtil
 import com.intellij.util.ui.UIUtil
-import kotlinx.coroutines.CompletableDeferred
 import org.eclipse.lsp4j.ConfigurationItem
 import java.nio.file.Files
 import java.nio.file.Path
@@ -77,7 +76,7 @@ class BiomeLauncherLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mod
         settings.configPath = ""
         manager.setInterpreterRef(NodeJsInterpreterRef.create(NodeJsLocalInterpreter(root.resolve("different missing node").toString())))
         val path = Files.createDirectories(root.resolve("path without node"))
-        EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(original + ("PATH" to path.toString())))
+        setTestEnvironment(original + ("PATH" to path.toString()))
         try {
             startThroughManager(selected)
             val records = Files.readAllLines(log)
@@ -91,7 +90,7 @@ class BiomeLauncherLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mod
             assertNotNull(configuration)
             assertEquals(config, (configuration as com.github.biomejs.intellijbiome.lsp.BiomeLspWorkspaceSettings).configurationPath)
         } finally {
-            EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(original))
+            setTestEnvironment(original)
         }
     }
 

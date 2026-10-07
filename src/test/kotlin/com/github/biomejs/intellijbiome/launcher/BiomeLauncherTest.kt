@@ -18,7 +18,6 @@ import com.intellij.testFramework.builders.ModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.CodeInsightFixtureTestCase
 import com.intellij.testFramework.fixtures.ModuleFixture
 import com.intellij.util.EnvironmentUtil
-import kotlinx.coroutines.CompletableDeferred
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -207,8 +206,8 @@ class BiomeLauncherTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Module
         val path = Files.createDirectories(Path.of(myFixture.tempDirPath, "path without node"))
         if (!Files.exists(path.resolve("ldd"))) Files.createSymbolicLink(path.resolve("ldd"), executableOnPath("ldd"))
         assertFalse(Files.exists(path.resolve("node")))
-        EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(original + extra + ("PATH" to path.toString())))
-        try { action(path) } finally { EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(original)) }
+        setTestEnvironment(original + extra + ("PATH" to path.toString()))
+        try { action(path) } finally { setTestEnvironment(original) }
     }
 
     private fun executableOnPath(name: String): Path = EnvironmentUtil.getEnvironmentMap().getValue("PATH")
