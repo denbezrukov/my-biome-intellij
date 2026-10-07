@@ -213,6 +213,7 @@ REQUIRED_TESTS = {
         "testMissingExecutableRemainsAFailure",
         "testNonzeroExitIsPreserved",
         "testPlatformCancellationIsPreservedAndTerminatesChild",
+        "testProcessExitDuringStateReadIsNotReportedAsAnOrphan",
         "testProjectDisposalTerminatesTheChild",
         "testVersionCoroutineCancellationIsPreservedAndTerminatesChild",
         "testVersionDeadlineTerminatesTheProcess",
