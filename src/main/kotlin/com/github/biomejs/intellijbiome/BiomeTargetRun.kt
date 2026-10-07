@@ -72,27 +72,26 @@ sealed interface BiomeTargetRun {
 }
 
 class BiomeTargetRunBuilder(val project: Project) {
+    private val configurationMode = BiomeSettings.getInstance(project).configurationMode
+    private val interpreter = NodeJsInterpreterManager.getInstance(project).interpreter
+
     fun getBuilder(
         executable: String,
+        workingDirectory: String? = project.basePath?.takeIf { File(it).exists() },
     ): ProcessCommandBuilder {
         if (executable.isEmpty()) {
             throw ExecutionException(BiomeBundle.message("biome.language.server.not.found"))
         }
 
-        val settings = BiomeSettings.getInstance(project)
-        val configurationMode = settings.configurationMode
-
         val builder: ProcessCommandBuilder = if (configurationMode == ConfigurationMode.MANUAL) {
             GeneralProcessCommandBuilder()
         } else {
-            val interpreter = NodeJsInterpreterManager.getInstance(project).interpreter
             if (interpreter !is NodeJsLocalInterpreter && interpreter !is WslNodeInterpreter) {
                 throw ExecutionException(JavaScriptBundle.message("lsp.interpreter.error"))
             }
             NodeProcessCommandBuilder(project, interpreter)
         }
 
-        val workingDirectory = project.basePath?.takeIf { File(it).exists() }
         return builder.setExecutable(executable).setWorkingDirectory(workingDirectory).setCharset(Charsets.UTF_8)
     }
 }

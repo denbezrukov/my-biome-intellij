@@ -2,25 +2,35 @@ package com.github.biomejs.intellijbiome.lsp
 
 import com.github.biomejs.intellijbiome.*
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
+import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.util.Computable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerDescriptor
 import com.intellij.platform.lsp.api.LspServerSupportProvider
+import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
 import kotlin.io.path.Path
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
 import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.ConfigurationItem
 import org.eclipse.lsp4j.Diagnostic
+import java.util.concurrent.TimeUnit
 
 
 class BiomeLspServerSupportProvider : LspServerSupportProvider {
@@ -29,6 +39,9 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         file: VirtualFile,
         serverStarter: LspServerSupportProvider.LspServerStarter,
     ) {
+        if (project.isDisposed) return
+        val settings = BiomeSettings.getInstance(project)
+        if (!settings.isEnabled() || !settings.fileSupported(file)) return
         val biome = BiomePackage(project)
         val configPath = biome.configPath()
 
@@ -45,11 +58,9 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
             projectRootDir
         }
 
-        // Finds the Biome executable and check the version using CLI.
+        // Select the executable here; the platform probes it during pooled server startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
-        val version = runBlocking { biome.versionNumber() }
-
-        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, version, configPath))
+        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath))
     }
 
     override fun createLspServerWidgetItem(lspServer: LspServer,
@@ -61,23 +72,69 @@ private class BiomeLspServerDescriptor(
     project: Project,
     root: VirtualFile,
     executable: String,
-    version: String?,
     private val configPath: String?,
 ) : LspServerDescriptor(project, "Biome", root) {
-    private val targetRun: BiomeTargetRun = run {
-        var builder = BiomeTargetRunBuilder(project)
-            .getBuilder(executable)
-            .addParameters(listOf(ProcessCommandParameter.Value("lsp-proxy")))
+    private val executionContext = BiomeTargetRunBuilder(project)
+    private val probeRun = executionContext.getBuilder(executable, root.path)
+        .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
+    private val targetRun = executionContext.getBuilder(executable, root.path)
+        .addParameters(listOf(ProcessCommandParameter.Value("lsp-proxy"))).build()
+    private val legacyTargetRun = configPath?.takeIf { it.isNotEmpty() }?.let {
+        executionContext.getBuilder(executable, root.path).addParameters(listOf(
+            ProcessCommandParameter.Value("lsp-proxy"),
+            ProcessCommandParameter.Value("--config-path"),
+            ProcessCommandParameter.FilePath(Path(it)),
+        )).build()
+    }
 
-        // Backward compatibility for v1; `--config-path` is no longer available in v2
-        if (version != null && version.startsWith("1.") && !configPath.isNullOrEmpty()) {
-            builder = builder.addParameters(listOf(
-                ProcessCommandParameter.Value("--config-path"),
-                ProcessCommandParameter.FilePath(Path(configPath))
-            ))
+    override fun startServerProcess(): OSProcessHandler {
+        if (project.isDisposed) throw ProcessCanceledException()
+        val manager = LspServerManager.getInstance(project)
+        // The SDK queues process startup before adding the server in its EDT write action.
+        // A short read action waits for that publication and cannot mistake it for a stale start.
+        val server = ApplicationManager.getApplication().runReadAction(Computable {
+            manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                .find { it.descriptor === this }
+        }) ?: throw ProcessCanceledException()
+        // SDK stop removes this instance from its copy-on-write collection before shutdown.
+        // Poll its supported manager API rather than retaining an internal lifecycle listener.
+        val checkStartupCancellation = {
+            if (manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).none { it === server }) {
+                throw CancellationException("Biome server startup was stopped")
+            }
         }
-
-        builder.build()
+        var pendingHandler: OSProcessHandler? = null
+        return try {
+            val handler = runBlocking {
+                val version = BiomePackage(project).versionNumber(probeRun, checkStartupCancellation)
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                // Backward compatibility for v1; `--config-path` is no longer available in v2.
+                val handler = (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
+                    .also { pendingHandler = it }
+                // Synchronous target preparation can overlap a stop after the preceding guard.
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                handler
+            }
+            // Until runBlocking returns successfully, cancellation can discard its result.
+            // The SDK connector takes ownership only after this method returns.
+            pendingHandler = null
+            handler
+        } finally {
+            pendingHandler?.let { handler ->
+                terminateProbeProcess(handler)
+                try {
+                    handler.process.waitFor(1_000, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
+        }
     }
 
     override fun isSupportedFile(file: VirtualFile): Boolean {
@@ -89,14 +146,11 @@ private class BiomeLspServerDescriptor(
         throw RuntimeException("Not expected to be called because startServerProcess() is overridden")
     }
 
-    override fun startServerProcess(): OSProcessHandler =
-        targetRun.startProcess()
-
     override fun getFilePath(file: VirtualFile): String =
-        targetRun.toTargetPath(file.path)
+        probeRun.toTargetPath(file.path)
 
     override fun findLocalFileByPath(path: String): VirtualFile? =
-        super.findLocalFileByPath(targetRun.toLocalPath(path))
+        super.findLocalFileByPath(probeRun.toLocalPath(path))
 
     override val lspGoToDefinitionSupport = false
     override val lspCompletionSupport = null

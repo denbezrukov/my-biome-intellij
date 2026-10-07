@@ -12,32 +12,57 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
-    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
-        "testSelectedFilesRoundTrip",
-        "testLegacyDirectoryRoundTrip",
-        "testConfigPathValidation",
-        "testBlankOverrideRoundTrip",
-        "testPathWithSpaces",
-        "testSelectedConfigSurvivesApplyAndReopen",
-        "testInvalidManualInputCannotApply",
-        "testHiddenManualInputDoesNotBlockModeChange",
-    },
-    PACKAGE + "lsp.BiomeManualConfigLspTest": {
-        "testSelectedJsoncUsesSingleQuotes",
-        "testSelectedJsonUsesDoubleQuotes",
-        "testLegacyDirectoryUsesDoubleQuotes",
-    },
-    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
-        "testVersion1LaunchPreservesSelectedJsonc",
-        "testVersion1LegacyDirectoryLaunch",
-        "testVersion1EmptyOverrideOmitsConfigArgument",
-    },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
     },
+    PACKAGE + "lsp.BiomeManualConfigLspTest": {
+        "testLegacyDirectoryUsesDoubleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testSelectedJsoncUsesSingleQuotes",
+    },
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+    },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    },
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
+        "testBlankOverrideRoundTrip",
+        "testConfigPathValidation",
+        "testHiddenManualInputDoesNotBlockModeChange",
+        "testInvalidManualInputCannotApply",
+        "testLegacyDirectoryRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testSelectedFilesRoundTrip",
+    },
+    PACKAGE + "startup.BiomeStartupLspTest": {
+        "testAutomaticRootsProbeTheirSelectedDependencyInsteadOfPackageMetadata",
+        "testDisabledPluginDoesNotProbeOrRequestServerStart",
+        "testManualV1AndV2ConfigurationTransportIsPreserved",
+        "testStaleDescriptorNeverStartsAProbeOrServer",
+        "testStopDuringFinalProcessCreationDoesNotLoseProcessOwnership",
+        "testStoppingInitializingServerCancelsProbeAndPreventsLaunch",
+        "testSupportedFileRequestsServerStart",
+        "testTwoNestedRootsKeepSelectedExecutableAndWorkingDirectory",
+        "testUnsupportedFileDoesNotProbeOrRequestServerStart",
+    },
+    PACKAGE + "startup.BiomeStartupProbeTest": {
+        "testCancellingCollectionTerminatesWrapperDescendants",
+        "testCancellingNodeStyleCollectionTerminatesInterruptIgnoringDescendants",
+        "testCancellingVersionCollectionTerminatesTheProcess",
+        "testCoroutineCancellationTerminatesTheProcess",
+        "testInvalidVersionAndNonzeroExitRemainFailures",
+        "testMissingExecutableRemainsAFailure",
+        "testNonzeroExitIsPreserved",
+        "testPlatformCancellationIsPreservedAndTerminatesChild",
+        "testProjectDisposalTerminatesTheChild",
+        "testVersionCoroutineCancellationIsPreservedAndTerminatesChild",
+        "testVersionDeadlineTerminatesTheProcess",
+        "testVersionOutputIdentifiesV1AndV2",
     },
 }
 
