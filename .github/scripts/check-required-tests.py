@@ -187,6 +187,10 @@ REQUIRED_TESTS = {
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
     },
+    PACKAGE + "lsp.LegacyBiomeSharedDaemonLspTest": {
+        "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+        "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+    },
     PACKAGE + "lsp.BiomeSharedDaemonLspTest": {
         "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
         "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",

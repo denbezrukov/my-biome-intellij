@@ -50,8 +50,8 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 182 named
-tests across 22 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 184 named
+tests across 23 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
@@ -88,6 +88,13 @@ correctly without a post-restart reopen or diagnostic retry. Other legacy and v1
 in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
 
 The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
+
+The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
+Node/native stop-ownership controls. The legacy cases require two actual projects, exact
+formatting, an unchanged second server and daemon, first-client proxy cleanup, and final-client
+daemon shutdown. They do not reopen documents after stopping or claim to solve 2.2.3's
+upstream first-open registration race. The 2.5.15 cases retain full replacement diagnostics
+and formatting assertions.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
