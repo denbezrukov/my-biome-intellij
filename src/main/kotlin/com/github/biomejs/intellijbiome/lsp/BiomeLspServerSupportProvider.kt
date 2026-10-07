@@ -139,7 +139,10 @@ private class BiomeLspServerDescriptor(
 
     override fun isSupportedFile(file: VirtualFile): Boolean {
         return BiomeSettings.getInstance(project).fileSupported(file)
-            && roots.any { root -> file.toNioPath().startsWith(root.toNioPath()) }
+            && roots.any { root ->
+                file.toNioPath().startsWith(root.toNioPath()) &&
+                    (!configPath.isNullOrEmpty() || file.findNearestBiomeConfig(root)?.parent == root)
+            }
     }
 
     override fun createCommandLine(): GeneralCommandLine {
