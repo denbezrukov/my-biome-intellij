@@ -209,11 +209,10 @@ class ReleaseWorkflowTest(unittest.TestCase):
     def test_explicit_publication_consumes_validated_archive_without_build(self):
         publisher = self.workflow['jobs'][self.publication_job()]
         self.assertTrue(self.runnable(self.publication_job(), publish=True, results={'compatibility': 'success', 'validate-release': 'success'}))
-        uploads = [step for step in publisher['steps'] if step.get('uses', '').startswith('softprops/action-gh-release@')]
+        uploads = [step for step in publisher['steps'] if step.get('id') == 'create-draft']
         self.assertEqual(1, len(uploads))
-        self.assertEqual('${{ steps.validate.outputs.archive }}', uploads[0]['with']['files'])
-        self.assertIs(uploads[0]['with']['fail_on_unmatched_files'], True)
-        self.assertIs(uploads[0]['with']['draft'], True)
+        self.assertEqual('${{ steps.validate.outputs.archive }}', uploads[0]['env']['RELEASE_ARCHIVE'])
+        self.assertEqual('${{ steps.validate.outputs.sha256 }}', uploads[0]['env']['RELEASE_SHA256'])
         self.assertFalse(any('gradlew' in step.get('run', '') for step in publisher['steps']))
 
 

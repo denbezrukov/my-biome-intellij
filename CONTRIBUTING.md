@@ -128,12 +128,15 @@ The release pipeline has a separate Python regression inventory (it does not cha
 ```shell
 python3 -m pip install PyYAML==6.0.3
 python3 .github/scripts/test-release-artifact.py
+python3 .github/scripts/test-publish-draft.py
 ```
 
 Its 15 tests cover stable/nightly version selection, the actual workflow validation command, nested JAR descriptor
 identity and minimum build, filename/version/SHA256 agreement, damaged or missing archives and descriptors, unsafe
 versions, dry-run authorization, and missing/failed/skipped/cancelled gate outcomes. The `Publish` workflow runs this
-inventory before selecting a version or invoking the compatibility gate.
+inventory before selecting a version or invoking the compatibility gate. The separate 15-test draft-publication
+inventory mocks the GitHub API, including existing published/draft releases, lightweight/annotated tags, pagination,
+API failures, tag/release collisions, and exact ZIP upload bytes. These tests make no network requests or release writes.
 
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 
@@ -170,8 +173,16 @@ embedded version both use `BASE_VERSION-nightly.COMMIT_SHA7`.
 
 Creating a GitHub draft release requires explicitly checking the `publish` input. The publisher depends on both the
 compatibility gate and successful dry-run validation. It downloads the same artifact, validates it again, and uploads
-that exact ZIP without rebuilding or renaming it. Both stable and nightly drafts use a version-specific tag targeting
-the workflow commit. Running this workflow with its defaults creates no GitHub release or tag.
+that exact ZIP without rebuilding or renaming it. The creation-only publisher refuses every existing release and
+version tag, including matching lightweight or annotated tags. It atomically creates a new tag at the workflow commit,
+then creates a new draft; it never updates a release or moves a tag. Concurrent workflow publishers for the same
+version are serialized. A collision or API failure stops publication; a tag or incomplete draft already created during
+that attempt is retained for manual inspection, and a rerun of the same version is refused. Running this workflow with
+its defaults creates no GitHub release or tag.
+
+GitHub's release and asset APIs are separate requests, so maintainers must leave the newly created draft unpublished
+until its ZIP upload completes. The publisher rechecks the draft and tag before and after upload; workflow concurrency
+covers this workflow's publishers, and cannot serialize independent manual or external release operations.
 
 This fork has no Marketplace upload job. The plugin retains its upstream ID `com.github.biomejs.intellijbiome` and
 vendor `biomejs`; those identifiers do not authorize a fork to publish an update to the upstream Marketplace listing.
