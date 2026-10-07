@@ -60,6 +60,15 @@ To enable formatting, open Biome settings and enable **LSP-based Code Formatting
 If you want to format code on save, navigate to **Actions on Save** settings and enable **Reformat Code**, specifying the desired file types.
 
 
+#### Biome actions on save
+
+Enable Biome's save actions in **Actions on Save**. For each supported document, enabled actions run in this order: safe fixes, organize imports, then formatting. They share a five-second total budget and run with cancellable background progress.
+
+A timeout or ordinary failure stops Biome work for that file while other files continue. Valid edits completed before the failure remain and are saved; there is no rollback. Timeouts produce a file-specific warning in the IDE log. Other failures also show a notification naming the affected file. Typing cancels pending work for that document, and canceled or stale responses do not overwrite newer text. User cancellation and project closure stop the corresponding work without an error notification.
+
+The IDE controls ordering relative to its built-in formatter. WebStorm 2025.3 runs **Reformat Code** before Biome's save actions. This five-second budget applies only to Biome save actions; manual fixes, import sorting and formatting keep their existing behavior.
+
+
 ### Supported IDEs
 
 This plugin is currently supported in the following IDEs:
