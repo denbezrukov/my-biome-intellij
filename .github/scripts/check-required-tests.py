@@ -162,6 +162,8 @@ REQUIRED_TESTS = {
         "testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable",
         "testManualRecoveryPreservesAnotherProjectServerAndFormatting",
         "testMissingConfigCreationRecoversSameEditorWithSelectedExecutable",
+        "testPersistedWhitespaceOverrideRecoversAfterConfigCreation",
+        "testPersistedWhitespaceOverrideRecoversAfterConfigRepair",
         "testUnrelatedConfigDoesNotRecoverManualEditor",
         "testWhitespaceOverrideUsesSameEditorDiscovery",
     },

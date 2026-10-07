@@ -18,7 +18,8 @@ class BiomeSettings :
             state.executablePath = value
         }
     var configPath: String
-        get() = state.configPath ?: ""
+        // Persisted state bypasses the setter, including whitespace saved by older versions.
+        get() = state.configPath?.takeUnless { it.isBlank() } ?: ""
         set(value) {
             state.configPath = if (value.isBlank()) "" else value
         }

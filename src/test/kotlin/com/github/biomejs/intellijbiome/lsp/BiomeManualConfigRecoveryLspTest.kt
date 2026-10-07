@@ -3,6 +3,7 @@ package com.github.biomejs.intellijbiome.lsp
 import com.github.biomejs.intellijbiome.BiomePackage
 import com.github.biomejs.intellijbiome.services.BiomeServerService
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
+import com.github.biomejs.intellijbiome.settings.BiomeSettingsState
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.lang.javascript.modules.TestNpmPackage
 import com.intellij.lang.javascript.modules.TestNpmPackageInstaller
@@ -20,6 +21,7 @@ import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.replaceService
 import com.intellij.testFramework.builders.EmptyModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
+import com.intellij.util.xmlb.XmlSerializer
 import kotlinx.coroutines.*
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -65,6 +67,28 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
         BiomeSettings.getInstance(project).configPath = " \t\n"
         recover(malformed = false)
         assertEquals("", BiomeSettings.getInstance(project).configPath)
+    }
+
+    fun testPersistedWhitespaceOverrideRecoversAfterConfigCreation() {
+        loadPersistedWhitespaceOverride()
+        recover(malformed = false)
+    }
+
+    fun testPersistedWhitespaceOverrideRecoversAfterConfigRepair() {
+        loadPersistedWhitespaceOverride()
+        recover(malformed = true)
+    }
+
+    private fun loadPersistedWhitespaceOverride() {
+        // Older versions stored these values directly; loading state bypasses the settings setter.
+        val saved = BiomeSettingsState().apply {
+            configurationMode = ConfigurationMode.MANUAL
+            executablePath = selectedExecutable
+            configPath = " \t\n"
+        }
+        val settings = BiomeSettings.getInstance(project)
+        settings.loadState(XmlSerializer.deserialize(XmlSerializer.serialize(saved), BiomeSettingsState::class.java))
+        assertEquals("The persisted regression must retain whitespace in raw state", " \t\n", settings.state.configPath)
     }
 
     fun testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation() {
