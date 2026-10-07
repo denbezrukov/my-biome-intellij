@@ -146,6 +146,17 @@ REQUIRED_TESTS = {
         "testSelectedJsonUsesDoubleQuotes",
         "testSelectedJsoncUsesSingleQuotes",
     },
+    PACKAGE + "lsp.BiomeManualConfigRecoveryLspTest": {
+        "testDisabledModePreventsPendingManualRecovery",
+        "testDisposalCancelsPendingManualConfigRecovery",
+        "testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery",
+        "testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation",
+        "testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable",
+        "testManualRecoveryPreservesAnotherProjectServerAndFormatting",
+        "testMissingConfigCreationRecoversSameEditorWithSelectedExecutable",
+        "testUnrelatedConfigDoesNotRecoverManualEditor",
+        "testWhitespaceOverrideUsesSameEditorDiscovery",
+    },
     PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
         "testVersion1EmptyOverrideOmitsConfigArgument",
         "testVersion1LaunchPreservesSelectedJsonc",
