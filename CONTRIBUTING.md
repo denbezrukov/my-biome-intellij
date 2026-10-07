@@ -44,7 +44,7 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest' --tests '*BiomeDisabledPreferencesTest' --tests '*BiomeDiagnosticsTest' --tests '*BiomeManualConfigRecoveryLspTest' --tests '*BiomeManualActionsTest'
+python3 .github/scripts/run-required-tests.py --task test
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
@@ -53,9 +53,10 @@ These suites exercise settings persistence, both Biome CLI versions, and real pl
 unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
 stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 227 named
-tests across 26 classes to execute without failures or skips. The CI
-job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 229 named
+tests across 27 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
+same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
+reports even when Gradle fails.
 
 The required `BiomeConfigTest` inventory exercises the real loader:
 
@@ -108,9 +109,59 @@ To check the report guard itself, run `python3 .github/scripts/test-check-requir
 Diagnostic coverage includes absent, string, integer and zero codes; multiline and HTML-sensitive
 messages/tooltips; real Biome highlighting and an applied parameter quick fix.
 `BiomeDiagnosticsTest.testRuntimeMessageRepresentationsKeepTheirText` exercises the running SDK's
-string representation and both plaintext/markdown `MarkupContent` where the SDK accepts it
-(the tested 263 SDK). Markup is preserved as readable, escaped text; rich Markdown rendering is not promised.
-Run this suite on the minimum, current stable and newest supported SDK when changing diagnostic APIs.
+string representation in supported SDK fixtures. Direct native 263 probes separately exercised plaintext/markdown
+`MarkupContent`; its full fixture smoke remains unvalidated and outside the supported range. Markup is preserved as
+readable, escaped text; rich Markdown rendering is not promised. Run this suite on the minimum and current supported
+SDKs when changing diagnostic APIs.
+
+The supported IDE workflow compiles production and test sources against WebStorm **2025.3 / WS-253.28294.332**
+with JDK 21 and Kotlin 2.2.20. It executes the complete named inventory on both that runtime and pinned current stable
+**2026.2.3 / WS-262.10968.77**. The stable pin comes from JetBrains' official release metadata dated September 17,
+2026. The custom runtime uses its matching IDE libraries, bundled JBR, and explicitly pinned platform test framework
+262.10968.67; it does not change `platformVersion`. Production compilation remains 253.
+
+```shell
+python3 .github/scripts/run-required-tests.py --task testCurrentIde
+python3 .github/scripts/check-required-tests.py build/test-results/testCurrentIde
+```
+
+`BiomeIdeRuntimeTest.testPinnedIdeRuntimeIsActuallyLoaded` requires the exact runtime build and prints its JBR
+version into JUnit XML. `testMinimumCompiledPluginIsLoadedInRuntime` checks that the plugin loads with its minimum
+descriptor and declared compilation SDK. These controls accompany the existing real startup, diagnostics, action,
+save-to-disk, undo/redo, stale/cancellation, nested-root, and dependency-upgrade regressions; a zero-test or skipped
+run cannot satisfy the gate. The save-order control recognizes the actual platform formatter API: 253 completes its legacy formatter before Biome; 262 runs the document-updating formatter after Biome according to the declared extension order. Both paths assert final disk contents, feature ordering, undo/redo groups, and no repeated Biome calls. Linux fixtures do not claim interactive desktop or Windows/WSL acceptance.
+
+The descriptor supports builds **253 through 262.***. The investigated **263.6259.34 / WebStorm 2026.3 EAP**
+is outside the admitted range: binary verification and direct diagnostic probes succeeded on an earlier archive,
+but its fixture smoke could not execute because the EAP test launcher failed before startup. This does not establish
+supported editor behavior. Extending the range requires a working runtime gate and verification of the newly packaged
+archive; EAP is not silently treated as a passing lane. Future targets are never selected with `recommended()` or `latest`.
+The current fixture includes the SDK's split JSON, Node.js, test-runner, structure-view, JCEF, SSH, bookmarks, images,
+and library-provider plugins, and uses its Kotlin stdlib without changing production dependencies. Runtime controls reject
+missing or disabled required plugins.
+
+Build and verify the same minimum-compiled archive:
+
+```shell
+version=$(sed -n 's/^pluginVersion=//p' gradle.properties)
+./gradlew buildPlugin verifyPlugin
+python3 .github/scripts/check-compatibility.py --archive "build/distributions/intellij-biome-$version.zip" --version "$version" --reports build/reports/pluginVerifier --target WS-253.28294.332 --target WS-262.10968.77 --output build/compatibility-provenance.json
+python3 .github/scripts/test-check-compatibility.py
+```
+
+Use a fresh verifier reports directory; CI removes it before verification. Both Gradle failure levels and the verdict
+guard reject compatibility problems, including the standalone verifier's zero-exit incompatibility result. The guard
+checks ZIP structure, plugin identity/version/minimum, exact target verdicts, and records the archive SHA-256.
+`requireMinimumCompileSdk` rejects newer production SDK overrides in compatibility/release tasks.
+
+To reuse already verified SDKs, supply `-PminimumIdePath=/path/to/253`, `-PcurrentIdePath=/path/to/262`. Local paths are overrides for runtime/verifier targets, never the production SDK.
+Cloud runs can set `BIOME_GRADLE_RUNNER` to their process-slot helper before invoking `run-required-tests.py`.
+
+`.github/workflows/_compatibility.yaml` is reusable by integration and release workflows. Its `artifact: false`
+input runs every gate and uploads evidence. Passing `true` additionally uploads the exact verified
+`intellij-biome-<version>.zip` after all gates pass, including in a caller's nonpublishing dry run. An optional `version`
+override accepts the version prepared by the caller. Outputs are `version`, `artifact-name`, and `sha256`; this workflow
+never publishes to a registry or creates a release.
 
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 

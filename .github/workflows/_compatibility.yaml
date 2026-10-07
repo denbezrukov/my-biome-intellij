@@ -1,0 +1,118 @@
+name: Supported IDE compatibility
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        type: boolean
+        default: false
+        description: 'Upload the exact verified plugin ZIP; this workflow never publishes'
+      version:
+        type: string
+        default: ''
+        description: 'Optional version prepared by the caller; defaults to gradle.properties'
+    outputs:
+      version:
+        value: ${{ jobs.verify-artifact.outputs.version }}
+      artifact-name:
+        value: ${{ jobs.verify-artifact.outputs.artifact-name }}
+      sha256:
+        value: ${{ jobs.verify-artifact.outputs.sha256 }}
+
+jobs:
+  plugin-tests:
+    name: Regression tests (${{ matrix.task }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [test, testCurrentIde]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Setup pinned fixture package manager
+        run: |
+          npm install --global corepack@0.34.0
+          corepack enable
+          corepack prepare pnpm@10.5.2 --activate
+      - name: Test gates
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          for test_script in .github/scripts/test-*.py; do python3 "$test_script"; done
+      - name: Run complete named inventory on pinned runtime
+        run: python3 .github/scripts/run-required-tests.py --task ${{ matrix.task }}
+      - name: Require executed tests (no failed, missing, or skipped cases)
+        if: always()
+        run: python3 .github/scripts/check-required-tests.py build/test-results/${{ matrix.task }}
+      - name: Upload fresh runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-${{ matrix.task }}
+          path: |
+            build/test-results/${{ matrix.task }}/
+            build/reports/tests/${{ matrix.task }}/
+
+  verify-artifact:
+    name: Verify minimum compiled artifact
+    needs: plugin-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.artifact.outputs.version }}
+      artifact-name: ${{ steps.artifact.outputs.artifact-name }}
+      sha256: ${{ steps.provenance.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Identify artifact
+        id: artifact
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        run: |
+          version="$VERSION_OVERRIDE"
+          if [ -z "$version" ]; then version=$(sed -n 's/^pluginVersion=//p' gradle.properties); fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=intellij-biome-$version.zip" >> "$GITHUB_OUTPUT"
+      - name: Build against minimum SDK and verify exact admitted targets
+        env:
+          PLUGIN_VERSION: ${{ steps.artifact.outputs.version }}
+        run: |
+          rm -rf build/reports/pluginVerifier
+          ./gradlew buildPlugin verifyPlugin "-PpluginVersion=$PLUGIN_VERSION" --console=plain
+      - name: Require packaged identity, exact targets, and compatible verdicts
+        env:
+          PLUGIN_VERSION: ${{ steps.artifact.outputs.version }}
+        run: >-
+          python3 .github/scripts/check-compatibility.py
+          --archive build/distributions/${{ steps.artifact.outputs.artifact-name }}
+          --version "$PLUGIN_VERSION"
+          --reports build/reports/pluginVerifier
+          --target WS-253.28294.332
+          --target WS-262.10968.77
+          --output build/compatibility-provenance.json
+      - name: Expose verified archive checksum
+        id: provenance
+        run: |
+          sha256=$(python3 -c 'import json; print(json.load(open("build/compatibility-provenance.json"))["sha256"])')
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+      - name: Upload verified minimum compiled plugin
+        if: ${{ inputs.artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.artifact-name }}
+          path: build/distributions/${{ steps.artifact.outputs.artifact-name }}
+          if-no-files-found: error
+      - name: Upload verifier evidence and archive provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-verifier
+          path: |
+            build/reports/pluginVerifier/
+            build/compatibility-provenance.json

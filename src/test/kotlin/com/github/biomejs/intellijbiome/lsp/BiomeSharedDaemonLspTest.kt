@@ -75,13 +75,13 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
         // Keep the temporary path short enough for Biome's Unix-domain socket.
         val cache = Files.createTempDirectory("biome-shared-")
         try {
-            EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(
+            com.github.biomejs.intellijbiome.launcher.setTestEnvironment(
                 originalEnvironment + ("XDG_CACHE_HOME" to cache.toString())
-            ))
+            )
             checkRestartInIsolatedCache(nativePrimary)
         } finally {
             try {
-                EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(originalEnvironment))
+                com.github.biomejs.intellijbiome.launcher.setTestEnvironment(originalEnvironment)
             } finally {
                 FileUtil.delete(cache.toFile())
             }

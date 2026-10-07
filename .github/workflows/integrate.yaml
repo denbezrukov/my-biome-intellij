@@ -7,74 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  plugin-tests:
-    name: Plugin tests
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup
-        uses: ./.github/actions/setup
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Setup pnpm
-        run: |
-          npm install --global corepack@0.34.0
-          corepack enable
-          corepack prepare pnpm@10.5.2 --activate
-
-      - name: Test required-results guard
-        run: python3 .github/scripts/test-check-required-tests.py
-
-      # The nested-root class selector includes config repair, restart order, and dependency-refresh recovery.
-      - name: Run plugin regression tests
-        run: >-
-          ./gradlew cleanTest test --no-build-cache
-          --tests '*BiomeCheckOnSaveActionTest'
-          --tests '*BiomeSaveOperationTest'
-          --tests '*BiomeLauncherLspTest'
-          --tests '*BiomeLauncherTest'
-          --tests '*BiomeConfigTest'
-          --tests '*BiomeConfigRecoveryLspTest'
-          --tests '*BiomeDependencyRefreshLifecycleTest'
-          --tests '*BiomeDependencyUpgradeLspTest'
-          --tests '*BiomeDiagnosticsTest'
-          --tests '*BiomeLanguageLspTest'
-          --tests '*BiomeLanguageRoutingTest'
-          --tests '*BiomeManualConfigCliTest'
-          --tests '*BiomeManualConfigLspTest'
-          --tests '*BiomeManualConfigRecoveryLspTest'
-          --tests '*BiomeManualConfigV1LspTest'
-          --tests '*BiomeNestedRootsLspTest'
-          --tests '*BiomeManualActionsTest'
-          --tests '*BiomeSaveActionsTest'
-          --tests '*BiomeSharedDaemonLspTest'
-          --tests '*OlderBiomeLanguageLspTest'
-          --tests '*UnusedFunctionHighlightingTest'
-          --tests '*V1BiomeLanguageLspTest'
-          --tests '*BiomeDisabledPreferencesTest'
-          --tests '*BiomeManualConfigSettingsTest'
-          --tests '*BiomeStartupLspTest'
-          --tests '*BiomeStartupProbeTest'
-
-      - name: Require executed regression tests
-        if: always()
-        run: python3 .github/scripts/check-required-tests.py build/test-results/test
-
-      - name: Upload plugin test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-test-reports
-          path: |
-            build/test-results/test/
-            build/reports/tests/test/
-
-  build:
-    name: Build
-    uses: ./.github/workflows/_build.yaml
+  supported-ide-compatibility:
+    name: Supported IDE compatibility
+    uses: ./.github/workflows/_compatibility.yaml
+    with:
+      artifact: false

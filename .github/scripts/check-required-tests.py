@@ -28,6 +28,10 @@ REQUIRED_TESTS = {
         "testValidJsonClosesStreamOnce",
         "testValidJsoncClosesStreamOnce",
     },
+    PACKAGE + "lsp.BiomeIdeRuntimeTest": {
+        "testPinnedIdeRuntimeIsActuallyLoaded",
+        "testMinimumCompiledPluginIsLoadedInRuntime",
+    },
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": {
         "testDisabledPreferencesExecuteNoSaveWork",
         "testFeatureSnapshotIsStable",
