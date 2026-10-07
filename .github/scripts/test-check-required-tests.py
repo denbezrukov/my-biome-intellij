@@ -26,6 +26,7 @@ REQUIRED_TESTS = {
         "testVersion1LegacyDirectoryLaunch",
     ),
     PACKAGE + "lsp.BiomeNestedRootsLspTest": (
+        "testChildFirstPublicRestartRestoresBothWorkspaces",
         "testChildThenParentIdeFormattingUsesChildServer",
         "testChildThenParentServiceFormattingUsesChildServer",
         "testExplicitManualConfigRetainsProjectWideOwnership",
@@ -33,6 +34,7 @@ REQUIRED_TESTS = {
         "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testParentFirstPublicRestartRestoresBothWorkspaces",
         "testParentThenChildIdeFormattingUsesChildServer",
         "testParentThenChildServiceFormattingUsesChildServer",
     ),
@@ -105,7 +107,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("47 required tests across 8 classes", result.stdout)
+            self.assertIn("49 required tests across 8 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

@@ -27,6 +27,7 @@ REQUIRED_TESTS = {
         "testVersion1LegacyDirectoryLaunch",
     },
     PACKAGE + "lsp.BiomeNestedRootsLspTest": {
+        "testChildFirstPublicRestartRestoresBothWorkspaces",
         "testChildThenParentIdeFormattingUsesChildServer",
         "testChildThenParentServiceFormattingUsesChildServer",
         "testExplicitManualConfigRetainsProjectWideOwnership",
@@ -34,6 +35,7 @@ REQUIRED_TESTS = {
         "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testParentFirstPublicRestartRestoresBothWorkspaces",
         "testParentThenChildIdeFormattingUsesChildServer",
         "testParentThenChildServiceFormattingUsesChildServer",
     },
