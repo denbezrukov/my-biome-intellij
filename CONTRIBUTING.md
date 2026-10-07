@@ -59,7 +59,9 @@ pins the unchanged secondary root to 2.5.14. This isolates root ownership, execu
 and configuration preservation from an independently reproduced Biome 2.2.3 initialization bug
 that can lose an early document open. The replacement still must deliver diagnostics and format
 correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
-in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
+in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation. When selecting
+an already-open file after restart, use `openFileInEditor` and retain its editor, document, and
+modification stamp: fixture reconfiguration rewrites the file and can invalidate pending diagnostics.
 
 The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
 Node/native stop-ownership controls. The legacy cases require two actual projects, exact
