@@ -163,6 +163,18 @@ input runs every gate and uploads evidence. Passing `true` additionally uploads 
 override accepts the version prepared by the caller. Outputs are `version`, `artifact-name`, and `sha256`; this workflow
 never publishes to a registry or creates a release.
 
+The release pipeline has a separate Python regression inventory (it does not change the JVM inventory):
+
+```shell
+python3 -m pip install PyYAML==6.0.3
+python3 .github/scripts/test-release-artifact.py
+```
+
+Its 15 tests cover stable/nightly version selection, the actual workflow validation command, nested JAR descriptor
+identity and minimum build, filename/version/SHA256 agreement, damaged or missing archives and descriptors, unsafe
+versions, dry-run authorization, and missing/failed/skipped/cancelled gate outcomes. The `Publish` workflow runs this
+inventory before selecting a version or invoking the compatibility gate.
+
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 
 ```shell

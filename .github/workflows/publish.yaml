@@ -7,95 +7,112 @@ on:
         type: boolean
         default: true
         required: false
-        description: 'Publish a nightly build'
+        description: 'Build a nightly version'
+      publish:
+        type: boolean
+        default: false
+        required: false
+        description: 'Explicitly create a GitHub draft release after validation'
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build
-    uses: ./.github/workflows/_build.yaml
-    with:
-      nightly: ${{ inputs.nightly }}
-      artifact: true
-
-  publish-jetbrains:
-    name: Publish to JetBrains Marketplace
-    needs: [ build ]
-    runs-on: depot-ubuntu-24.04-arm-16
-    environment: intellij-plugin
+  prepare-version:
+    name: Select release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Python for release regression tests
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
+          python-version: '3.12'
+      - name: Install workflow test parser
+        run: python3 -m pip install PyYAML==6.0.3
+      - name: Test release artifact and publication gates
+        run: python3 .github/scripts/test-release-artifact.py
+      - name: Select version without changing project properties
+        id: version
+        env:
+          NIGHTLY: ${{ inputs.nightly }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: >-
+          python3 .github/scripts/release-artifact.py version
+          --properties gradle.properties --nightly "$NIGHTLY" --sha "$COMMIT_SHA"
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 21
+  compatibility:
+    name: Verify release artifact
+    needs: [prepare-version]
+    uses: ./.github/workflows/_compatibility.yaml
+    with:
+      version: ${{ needs.prepare-version.outputs.version }}
+      artifact: true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4.2.0
-        with:
-          gradle-home-cache-cleanup: true
-
-      - name: Download the artifact
+  validate-release:
+    name: Validate release dry run
+    needs: [compatibility]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download verified artifact
         uses: actions/download-artifact@v4
         with:
-          name: Biome-${{ needs.build.outputs.version }}.zip
-
-      - name: Restore gradle.properties
-        uses: actions/cache/restore@v3
-        with:
-          path: gradle.properties
-          key: gradle.properties.${{ github.sha }}
-
-      - name: Publish Plugin
+          name: ${{ needs.compatibility.outputs.artifact-name }}
+          path: build/verified-release
+      - name: Validate intended upload and record provenance
+        id: validate
         env:
-          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
-          CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
-          PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
-          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew publishPlugin -PdistributionFile="./build/distributions/Biome-${{ needs.build.outputs.version }}.zip"
+          RELEASE_VERSION: ${{ needs.compatibility.outputs.version }}
+          RELEASE_SHA256: ${{ needs.compatibility.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/verified-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - name: Upload dry-run release record
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-record-${{ needs.compatibility.outputs.version }}
+          path: build/release-record.json
+          if-no-files-found: error
 
   publish-github-release:
-    name: Publish to GitHub Releases
-    needs: [ build ]
-    runs-on: depot-ubuntu-24.04
+    name: Publish GitHub draft release
+    if: inputs.publish
+    needs: [compatibility, validate-release]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download the artifact
+      - name: Download the same verified artifact
         uses: actions/download-artifact@v4
         with:
-          name: Biome-${{ needs.build.outputs.version }}.zip
-
-      - name: Generate release notes
-        id: release-notes
-        uses: orhun/git-cliff-action@v2
-        with:
-          config: cliff.toml
-          args: -vv --latest --strip header e71479100d4ed81b3e9c26881c38a0ddb7da31eb..
+          name: ${{ needs.compatibility.outputs.artifact-name }}
+          path: build/verified-release
+      - name: Revalidate exact upload input
+        id: validate
         env:
-          OUTPUT: CHANGES.md
-
-      - name: Strip tag from release notes
-        run: tail -n +3 < CHANGES.md > RELEASE_NOTES.md
-
-      - name: Rename artifact
-        run: mv "intellij-biome-${{ needs.build.outputs.version }}.zip" biome.zip
-
-      - name: Publish extension to GitHub Releases
-        uses: softprops/action-gh-release@v1
+          RELEASE_VERSION: ${{ needs.compatibility.outputs.version }}
+          RELEASE_SHA256: ${{ needs.compatibility.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/verified-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - name: Publish the verified ZIP as a draft
+        uses: softprops/action-gh-release@v2
         with:
-          name: "v${{ needs.build.outputs.version }}"
-          body_path: RELEASE_NOTES.md
-          prerelease: ${{ needs.build.outputs.nightly == 'true' }}
+          name: v${{ needs.compatibility.outputs.version }}
+          tag_name: v${{ needs.compatibility.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ inputs.nightly }}
           draft: true
-          files: biome.zip
-          tag_name: ${{ needs.build.outputs.nightly == 'true' && github.ref || format('v{0}', needs.build.outputs.version) }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: ${{ steps.validate.outputs.archive }}
