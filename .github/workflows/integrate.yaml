@@ -31,6 +31,7 @@ jobs:
       - name: Test required-results guard
         run: python3 .github/scripts/test-check-required-tests.py
 
+      # The nested-root class selector includes config repair, restart order, and dependency-refresh recovery.
       - name: Run plugin regression tests
         run: >-
           ./gradlew cleanTest test --no-build-cache
@@ -38,6 +39,7 @@ jobs:
           --tests '*BiomeSaveOperationTest'
           --tests '*BiomeLauncherLspTest'
           --tests '*BiomeLauncherTest'
+          --tests '*BiomeConfigDiscoveryRoutingTest'
           --tests '*BiomeConfigRecoveryLspTest'
           --tests '*BiomeDependencyRefreshLifecycleTest'
           --tests '*BiomeDependencyUpgradeLspTest'

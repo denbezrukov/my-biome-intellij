@@ -44,18 +44,41 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigDiscoveryRoutingTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 167 named
-tests across 22 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 184 named
+tests across 23 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
 to finish while an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output. Packaging remains a separate `./gradlew buildPlugin` job.
+
+The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressions:
+
+- `testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace`
+- `testClosedEditorInvalidatesQueuedNestedRecovery`
+- `testMalformedConfigInvalidatesQueuedNestedRecovery`
+- `testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension`
+- `testDisabledModeDoesNotRecoverNestedConfig`
+- `testManualModeDoesNotRecoverNestedConfig`
+- `testCancellingNestedRecoveryStopsPendingVersionProbe`
+- `testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement`
+- `testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement`
+- `testNestedRepairPreservesAnotherProjectServer`
+- `testNewIndependentChildConfigRecoversUnownedEditor`
+- `testRepairAfterDependencyRefreshRestoresIndependentWorkspace`
+- `testRepairAfterMalformedChildRestartRestoresIndependentWorkspace`
+- `testRepairWithoutRestartControlRestoresIndependentWorkspace`
+
+They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
+config-event bursts, and project/mode isolation. Before a recovery restart, every active workspace and prospective
+executable must be reconstructable. Broken or missing replacements retain live servers while a bounded recovery
+request retries; the regression restores the executable without another config event or editor reopen. Cancellation
+also terminates a live preflight process without stopping the working servers. Config removal and reparenting remain separate lifecycle work.
 
 The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
 pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
@@ -65,6 +88,8 @@ correctly without a post-restart reopen or diagnostic retry. Other legacy and v1
 in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation. When selecting
 an already-open file after restart, use `openFileInEditor` and retain its editor, document, and
 modification stamp: fixture reconfiguration rewrites the file and can invalidate pending diagnostics.
+
+The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
 
 The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
 Node/native stop-ownership controls. The legacy cases require two actual projects, exact
