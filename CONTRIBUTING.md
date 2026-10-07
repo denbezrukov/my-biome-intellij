@@ -74,6 +74,13 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
 config-event bursts, and project/mode isolation. Config removal and reparenting remain separate lifecycle work.
 
+The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
+pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
+and configuration preservation from an independently reproduced Biome 2.2.3 initialization bug
+that can lose an early document open. The replacement still must deliver diagnostics and format
+correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
+in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
+
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
