@@ -26,7 +26,24 @@ import java.nio.file.Files
 
 // Isolate client/daemon lifecycle from Biome 2.2.3's upstream early-open registration defect.
 @TestNpmPackage("@biomejs/biome@2.5.15")
-class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
+class BiomeSharedDaemonLspTest : BiomeSharedDaemonFixtureTestCase("2.5.15") {
+    fun testNodeRestartPreservesSharedDaemonAndCleansUpProxies() = checkLifecycle(nativePrimary = false)
+
+    fun testNativeRestartPreservesSharedDaemonAndCleansUpProxies() = checkLifecycle(nativePrimary = true)
+}
+
+// Keep legacy process ownership covered without requiring a replacement client's
+// first didOpen to survive the independently reproduced 2.2.3 registration race.
+@TestNpmPackage("@biomejs/biome@2.2.3")
+class LegacyBiomeSharedDaemonLspTest : BiomeSharedDaemonFixtureTestCase("2.2.3") {
+    fun testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies() =
+        checkLifecycle(nativePrimary = false, restartPrimary = false)
+
+    fun testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies() =
+        checkLifecycle(nativePrimary = true, restartPrimary = false)
+}
+
+abstract class BiomeSharedDaemonFixtureTestCase(private val biomeVersion: String) : BiomeLspFixtureTestCase() {
     private lateinit var root: VirtualFile
     private lateinit var source: VirtualFile
 
@@ -58,18 +75,14 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             events.awaitDiagnostics(source)
         }
         val original = servers().single { it.descriptor.roots.single() == root }
-        assertEquals("2.5.15", original.initializeResult?.serverInfo?.version)
+        assertEquals(biomeVersion, original.initializeResult?.serverInfo?.version)
         formatAndAssert()
         WriteCommandAction.runWriteCommandAction(project) { myFixture.editor.document.setText("const message=\"hello\";\n") }
         FileDocumentManager.getInstance().saveDocument(myFixture.editor.document)
         return original
     }
 
-    fun testNodeRestartPreservesSharedDaemonAndCleansUpProxies() = checkRestart(nativePrimary = false)
-
-    fun testNativeRestartPreservesSharedDaemonAndCleansUpProxies() = checkRestart(nativePrimary = true)
-
-    private fun checkRestart(nativePrimary: Boolean) {
+    protected fun checkLifecycle(nativePrimary: Boolean, restartPrimary: Boolean = true) {
         val originalEnvironment = EnvironmentUtil.getEnvironmentMap().toMap()
         // Both clients must share a daemon created by this scenario. A checkout-wide
         // cache can legitimately reuse a daemon owned by an earlier fixture or JVM.
@@ -79,7 +92,7 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             com.github.biomejs.intellijbiome.launcher.setTestEnvironment(
                 originalEnvironment + ("XDG_CACHE_HOME" to cache.toString())
             )
-            checkRestartInIsolatedCache(nativePrimary)
+            checkLifecycleInIsolatedCache(nativePrimary, restartPrimary)
         } finally {
             try {
                 com.github.biomejs.intellijbiome.launcher.setTestEnvironment(originalEnvironment)
@@ -89,7 +102,7 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
         }
     }
 
-    private fun checkRestartInIsolatedCache(nativePrimary: Boolean) {
+    private fun checkLifecycleInIsolatedCache(nativePrimary: Boolean, restartPrimary: Boolean) {
         if (nativePrimary) {
             val native = Files.walk(root.toNioPath().resolve("node_modules/.pnpm")).use { paths ->
                 paths.filter { it.fileName.toString() == "biome" && it.parent.fileName.toString() == "cli-linux-x64" }
@@ -127,7 +140,7 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             awaitInitialReadiness(other, otherProject, otherFixture, otherEvents)
             val otherManager = LspServerManager.getInstance(otherProject)
             val otherServer = otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
-            assertEquals("2.5.15", otherServer.initializeResult?.serverInfo?.version)
+            assertEquals(biomeVersion, otherServer.initializeResult?.serverInfo?.version)
             assertFormattingResponse(otherServer, other, "const other = 1;\n")
             val before = processes(root, otherRoot)
             val originalProxies = before.filter { it.command.contains(" lsp-proxy") && it.command.contains(root.path) }
@@ -135,32 +148,37 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             val daemon = before.single { it.command.contains(" __run_server ") }
             assertTrue("Daemon must start as a descendant of the first project's proxy",
                 originalProxies.any { it.pid == daemon.parent })
-            logProcesses("Before primary restart", before)
-            project.service<BiomeServerService>().restartBiomeServer()
-            PlatformTestUtil.waitWithEventsDispatching("Existing restart did not replace the primary server", {
-                servers().singleOrNull()?.let { it !== original && it.state == LspServerState.Running } == true
-            }, 20)
-            val replacement = servers().single()
-            logProcesses("After primary restart", processes(root, otherRoot))
-            assertEquals(listOf(otherServer), otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
-            assertEquals(LspServerState.Running, otherServer.state)
-            assertEquals("2.5.15", otherServer.initializeResult?.serverInfo?.version)
-            // The shared daemon can cancel reads while replacement didOpen writes
-            // document state. Establish recovery before querying the other client.
-            waitUntilFileOpenedByLspServer(project, source, timeout = 20)
-            events.awaitDiagnostics(source, replacement)
-            assertFormattingResponse(otherServer, other, "const other = 1;\n")
-            assertTrue("Restart must preserve the shared daemon process", isExecuting(daemon.pid))
-            awaitExit("Old primary wrapper/native proxy survived restart", originalProxies)
-            formatAndAssert()
+            logProcesses("Before primary lifecycle change", before)
+            if (restartPrimary) {
+                project.service<BiomeServerService>().restartBiomeServer()
+                PlatformTestUtil.waitWithEventsDispatching("Existing restart did not replace the primary server", {
+                    servers().singleOrNull()?.let { it !== original && it.state == LspServerState.Running } == true
+                }, 20)
+                val replacement = servers().single()
+                logProcesses("After primary restart", processes(root, otherRoot))
+                assertEquals(listOf(otherServer), otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
+                assertEquals(LspServerState.Running, otherServer.state)
+                assertEquals(biomeVersion, otherServer.initializeResult?.serverInfo?.version)
+                // The shared daemon can cancel reads while replacement didOpen writes
+                // document state. Establish recovery before querying the other client.
+                waitUntilFileOpenedByLspServer(project, source, timeout = 20)
+                events.awaitDiagnostics(source, replacement)
+                assertFormattingResponse(otherServer, other, "const other = 1;\n")
+                assertTrue("Restart must preserve the shared daemon process", isExecuting(daemon.pid))
+                awaitExit("Old primary wrapper/native proxy survived restart", originalProxies)
+                formatAndAssert()
+            }
 
-            val replacementProxies = processes(root, otherRoot).filter {
+            val activePrimaryProxies = processes(root, otherRoot).filter {
                 it.command.contains(" lsp-proxy") && it.command.contains(root.path)
             }
-            assertEquals(if (nativePrimary) 1 else 2, replacementProxies.size)
+            assertEquals(if (nativePrimary) 1 else 2, activePrimaryProxies.size)
             project.service<BiomeServerService>().stopBiomeServer()
-            awaitExit("Replacement primary proxies survived stop", replacementProxies)
+            awaitExit("Primary proxies survived stop", activePrimaryProxies)
             assertTrue("The second client still needs the shared daemon", isExecuting(daemon.pid))
+            assertEquals(listOf(otherServer), otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
+            assertEquals(LspServerState.Running, otherServer.state)
+            assertEquals(biomeVersion, otherServer.initializeResult?.serverInfo?.version)
             assertFormattingResponse(otherServer, other, "const other = 1;\n")
 
             val otherProxies = processes(root, otherRoot).filter { it.command.contains(" lsp-proxy") }
