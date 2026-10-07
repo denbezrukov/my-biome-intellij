@@ -174,6 +174,10 @@ REQUIRED_TESTS = {
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
     ),
+    PACKAGE + "lsp.LegacyBiomeSharedDaemonLspTest": (
+        "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+        "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+    ),
     PACKAGE + "lsp.BiomeSharedDaemonLspTest": (
         "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
         "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",
@@ -257,7 +261,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("171 required tests across 22 classes", result.stdout)
+            self.assertIn("173 required tests across 23 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
