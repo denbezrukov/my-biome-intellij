@@ -94,9 +94,12 @@ negative control uses an explicit override. Mode changes, project disposal and u
 remain covered. Controlled-dispatcher races also require changes to Manual config/executable selections to discard
 stale discovery requests before an EDT restart, then adopt the current executable on a fresh read.
 
-The launcher inventory includes `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
-`testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`. Both require the native Node handler to finish while
-an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output.
+The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
+pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
+and configuration preservation from an independently reproduced Biome 2.2.3 initialization bug
+that can lose an early document open. The replacement still must deliver diagnostics and format
+correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
+in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
