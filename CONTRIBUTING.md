@@ -53,7 +53,7 @@ These suites exercise settings persistence, both Biome CLI versions, and real pl
 unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
 stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 225 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 227 named
 tests across 26 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
 
@@ -94,11 +94,14 @@ The manual executable recovery gate includes these named `BiomeManualConfigRecov
 - `testUnrelatedConfigDoesNotRecoverManualEditor`
 - `testManualRecoveryPreservesAnotherProjectServerAndFormatting`
 - `testDisposalCancelsPendingManualConfigRecovery`
+- `testExplicitOverrideInvalidatesQueuedManualRecovery`
+- `testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry`
 
 They retain the open editor, selected executable and real server version, and verify formatting with a different
 project dependency installed. Nonblank overrides retain exact configuration selection; the existing nested Manual
 negative control uses an explicit override. Mode changes, project disposal and unrelated config/project isolation
-remain covered.
+remain covered. Controlled-dispatcher races also require changes to Manual config/executable selections to discard
+stale discovery requests before an EDT restart, then adopt the current executable on a fresh read.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 

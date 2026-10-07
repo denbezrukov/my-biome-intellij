@@ -148,6 +148,8 @@ REQUIRED_TESTS = {
     PACKAGE + "lsp.BiomeManualConfigRecoveryLspTest": (
         "testDisabledModePreventsPendingManualRecovery",
         "testDisposalCancelsPendingManualConfigRecovery",
+        "testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry",
+        "testExplicitOverrideInvalidatesQueuedManualRecovery",
         "testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery",
         "testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation",
         "testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable",
@@ -319,7 +321,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("225 required tests across 26 classes", result.stdout)
+            self.assertIn("227 required tests across 26 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
