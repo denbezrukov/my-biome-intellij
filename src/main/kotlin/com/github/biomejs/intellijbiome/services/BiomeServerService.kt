@@ -7,6 +7,9 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.execute
+import com.intellij.openapi.command.undo.BasicUndoableAction
+import com.intellij.openapi.command.undo.UndoManager
+import com.intellij.openapi.command.undo.UnexpectedUndoException
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import kotlinx.coroutines.currentCoroutineContext
@@ -14,6 +17,7 @@ import kotlinx.coroutines.ensureActive
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
@@ -25,6 +29,7 @@ import com.intellij.platform.lsp.util.getRangeInDocument
 import com.intellij.util.LineSeparator
 import org.eclipse.lsp4j.*
 import java.util.*
+import java.io.IOException
 
 @Service(Service.Level.PROJECT)
 class BiomeServerService internal constructor(
@@ -163,9 +168,38 @@ class BiomeServerService internal constructor(
             }
         }
 
-        // Update the separator used by the platform's final save. Converting the
-        // backing file here would recursively save an unfinished operation.
-        lineSeparator?.let { file.detectedLineSeparator = it.separatorString }
+        lineSeparator?.let { applyLineSeparator(document, file, it.separatorString) }
+    }
+
+    private fun applyLineSeparator(document: Document, file: VirtualFile, separator: String) {
+        if (file.detectedLineSeparator == separator) return
+        val manager = FileDocumentManager.getInstance()
+        val textChanged = manager.isDocumentUnsaved(document) &&
+            !StringUtil.equals(document.charsSequence,
+                LoadTextUtil.getTextByBinaryPresentation(file.contentsToByteArray(), file, false, false))
+        if (textChanged) {
+            // Text edits will be persisted by the platform's final save.
+            file.detectedLineSeparator = separator
+            return
+        }
+
+        // The final save skips equal normalized text, even when the document is
+        // dirty. Convert through the platform inside the guarded write command;
+        // the conversion action wrapper would recursively save the document.
+        val previousSeparator = manager.getLineSeparator(file, project)
+        LoadTextUtil.changeLineSeparators(project, file, separator, manager)
+        UndoManager.getInstance(project).undoableActionPerformed(object : BasicUndoableAction(document) {
+            override fun undo() = restoreSeparator(previousSeparator)
+            override fun redo() = restoreSeparator(separator)
+
+            private fun restoreSeparator(value: String) {
+                try {
+                    LoadTextUtil.changeLineSeparators(project, file, value, manager)
+                } catch (failure: IOException) {
+                    throw UnexpectedUndoException(failure.message ?: failure.toString()).apply { initCause(failure) }
+                }
+            }
+        })
     }
 
     fun notifyRestart() {

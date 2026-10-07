@@ -7,6 +7,7 @@ import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.lang.javascript.modules.TestNpmPackage
 import com.intellij.openapi.command.WriteCommandAction
+import com.github.biomejs.intellijbiome.actions.BiomeCheckOnSaveAction
 import com.github.biomejs.intellijbiome.actions.BiomeSaveOutcome
 import com.github.biomejs.intellijbiome.actions.runBiomeSaveOperation
 import com.intellij.openapi.application.EDT
@@ -32,6 +33,10 @@ import org.eclipse.lsp4j.TextEdit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import com.intellij.testFramework.LoggedErrorProcessor
 
 @TestNpmPackage("@biomejs/biome@2.2.3")
 class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
@@ -115,6 +120,71 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
         }
         assertSame(cancellation, thrown)
         assertEquals(original, document.text)
+    }
+
+    fun testCancellationWhileWriteIsQueuedDoesNotMutate() {
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val original = document.text
+        val originalSeparator = file.detectedLineSeparator
+        val originalBytes = diskText(document)
+        val requestReady = CompletableDeferred<Unit>()
+        val releaseResponse = CompletableDeferred<Unit>()
+        val writeQueued = CountDownLatch(1)
+        val executor = Executors.newSingleThreadExecutor()
+        val dispatcher = executor.asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val result = AtomicReference<Result<Unit>>()
+        val notifications = CopyOnWriteArrayList<com.intellij.notification.Notification>()
+        val warnings = CopyOnWriteArrayList<String>()
+        project.messageBus.connect(testRootDisposable).subscribe(com.intellij.notification.Notifications.TOPIC,
+            object : com.intellij.notification.Notifications {
+                override fun notify(notification: com.intellij.notification.Notification) {
+                    if (notification.groupId == "Biome") notifications += notification
+                }
+            })
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> {
+                    requestReady.complete(Unit)
+                    releaseResponse.await()
+                    // This marker cannot run on the single worker until the current
+                    // coroutine yields after dispatching its write to the held EDT.
+                    executor.execute { writeQueued.countDown() }
+                    return listOf(TextEdit(Range(Position(0, 0), Position(0, 0)), "// canceled\r\n"))
+                }
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        try {
+            LoggedErrorProcessor.executeWith(object : LoggedErrorProcessor() {
+                override fun processWarn(category: String, message: String, t: Throwable?): Boolean {
+                    if (category.contains("BiomeCheckOnSaveAction")) warnings += message
+                    return false
+                }
+            }).use {
+                scope.launch { result.set(runCatching { BiomeCheckOnSaveAction().updateDocument(project, document) }) }
+                PlatformTestUtil.waitWithEventsDispatching("Formatting request did not start", { requestReady.isCompleted }, 10)
+                releaseResponse.complete(Unit)
+                // Do not dispatch EDT events until the write has queued and its
+                // parent is canceled. A request-boundary check alone cannot pass.
+                assertTrue("Write was not queued", writeQueued.await(10, TimeUnit.SECONDS))
+                assertNull("The write must still be waiting for EDT", result.get())
+                val cancellation = CancellationException("cancel queued write")
+                scope.cancel(cancellation)
+                PlatformTestUtil.waitWithEventsDispatching("Canceled write did not finish", { result.get() != null }, 10)
+                val failure = result.get().exceptionOrNull()
+                assertTrue(failure === cancellation || failure?.cause === cancellation)
+                assertEquals(original, document.text)
+                assertEquals(originalSeparator, file.detectedLineSeparator)
+                assertEquals(originalBytes, diskText(document))
+                assertTrue(warnings.isEmpty())
+                assertTrue(notifications.isEmpty())
+            }
+        } finally {
+            releaseResponse.complete(Unit)
+            scope.cancel()
+            dispatcher.close()
+        }
     }
 
     fun testPlatformCancellationPropagates() {
@@ -206,6 +276,57 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
     fun testSavePreservesLfBytes() = checkLineSeparators("lf", "\n")
 
     fun testSavePreservesCrLfBytes() = checkLineSeparators("crlf", "\r\n")
+
+    fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n")
+
+    fun testLfOnlyEditPersists() = checkSeparatorOnlyEdit("\r\n", "\n")
+
+    fun testSeparatorPersistsWhenEarlierEditsReturnToSavedText() = checkSeparatorOnlyEdit("\n", "\r\n", true)
+
+    private fun checkSeparatorOnlyEdit(originalSeparator: String, requestedSeparator: String, earlierEdit: Boolean = false) {
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val formatted = "const value = 1;\nconsole.log(value);\n"
+        var requests = 0
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun codeActions(server: LspServer, params: CodeActionParams): List<Either<Command, CodeAction>> =
+                    listOf(Either.forRight(CodeAction("temporary fix").apply {
+                        edit = WorkspaceEdit(mapOf(params.textDocument.uri to listOf(
+                            TextEdit(Range(Position(0, 0), Position(0, 0)), "// fixed\n"))))
+                    }))
+
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> {
+                    requests++
+                    val endLine = if (earlierEdit) 3 else 2
+                    return listOf(TextEdit(Range(Position(0, 0), Position(endLine, 0)), formatted.replace("\n", requestedSeparator)))
+                }
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).apply {
+            applySafeFixesOnSave = earlierEdit
+            formatOnSave = true
+        }
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = originalSeparator
+            document.setText(formatted)
+        }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals("Separator conversion must not trigger a recursive save action", 1, requests)
+        assertEquals(formatted, document.text)
+        assertEquals(formatted.replace("\n", requestedSeparator), diskText(document))
+        assertEquals(requestedSeparator, file.detectedLineSeparator)
+        val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
+        val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
+        assertTrue("Separator-only formatting must be undoable", undo.isUndoAvailable(editor))
+        undo.undo(editor)
+        assertEquals("Undo must preserve normalized editor text", formatted, document.text)
+        assertEquals(formatted.replace("\n", originalSeparator), diskText(document))
+        assertTrue(undo.isRedoAvailable(editor))
+        undo.redo(editor)
+        assertEquals(formatted, document.text)
+        assertEquals(formatted.replace("\n", requestedSeparator), diskText(document))
+        assertEquals("Undo/redo must not restart Biome", 1, requests)
+    }
 
     private fun checkLineSeparators(option: String, separator: String) {
         val config = myFixture.findFileInTempDir("biome.json") ?: error("Missing config")
