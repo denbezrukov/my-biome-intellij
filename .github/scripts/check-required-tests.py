@@ -12,6 +12,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "launcher.BiomeLauncherLspTest": {
+        "testVersion1DescriptorPreservesSelectedLauncherAndConfig",
+        "testVersion2DescriptorPreservesSelectedLauncherAndConfig",
+    },
+    PACKAGE + "launcher.BiomeLauncherTest": {
+        "testCancellingNodeLauncherCollectionTerminatesItsProcess",
+        "testEnvironmentSettingShebangIsNotStripped",
+        "testManualLauncherKeepsSelectedTarget",
+        "testNativeDoesNotRequireConfiguredNodeInterpreter",
+        "testNativeWithJavaScriptSuffixStillRunsDirectly",
+        "testNodeScriptPreservesWorkingDirectoryArgumentsAndEnvironment",
+        "testNpmLauncherPreservesBiomeBinaryOverride",
+        "testShellWrapperKeepsItsEnvironmentSetup",
+        "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
+        "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
+    },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
