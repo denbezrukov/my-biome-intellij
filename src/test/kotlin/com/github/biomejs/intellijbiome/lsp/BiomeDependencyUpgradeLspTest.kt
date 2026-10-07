@@ -197,7 +197,9 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
         myFixture.tempDirFixture.createFile("upgrading/biome.json", """{"javascript":{"formatter":{"quoteStyle":"single"}}}""")
         source = myFixture.tempDirFixture.createFile("upgrading/index.js", "const message=\"hello\";\n")
         val otherRoot = myFixture.tempDirFixture.findOrCreateDir("other")
-        installLockedVersion("_biomejs_biome_2_2_3", otherRoot)
+        // Keep this root distinct from both upgrade versions; 2.2.3 can lose an
+        // initial didOpen during workspace setup, independently of root ownership.
+        installLockedVersion("_biomejs_biome_2_5_14", otherRoot)
         VfsUtil.markDirtyAndRefresh(false, true, true, otherRoot)
         myFixture.tempDirFixture.createFile("other/biome.json", """{"javascript":{"formatter":{"quoteStyle":"double"}}}""")
         val otherFile = myFixture.tempDirFixture.createFile("other/other.js", "const other='other';\n")
@@ -218,7 +220,7 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
         }
         val newOther = servers().single { it.descriptor.roots.single() == otherRoot }
         assertNotSame("The public API intentionally restarts every Biome root in this project", oldOther, newOther)
-        assertEquals("2.2.3", newOther.initializeResult?.serverInfo?.version)
+        assertEquals("2.5.14", newOther.initializeResult?.serverInfo?.version)
         assertTrue("Second root must retain its own dependency", (newOther.descriptor as BiomeLspServerDescriptor).executable.startsWith(otherRoot.path + "/node_modules/"))
         myFixture.configureFromExistingVirtualFile(otherFile)
         waitUntilFileOpenedByLspServer(project, otherFile, timeout = 15)
