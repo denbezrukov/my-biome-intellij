@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
@@ -231,13 +232,48 @@ class BiomeStartupProbeTest : BasePlatformTestCase() {
         }
     }
 
-    private fun isExecuting(pid: Long): Boolean {
+    fun testProcessExitDuringStateReadIsNotReportedAsAnOrphan() {
+        // This interleaving is specific to Linux's disappearing /proc process files.
+        assertTrue("This required process-state regression needs Linux procfs", Files.isDirectory(Path.of("/proc/self")))
+        val started = Files.createTempFile("biome-probe-state-read", ".pid")
+        Files.delete(started)
+        val handler = process("hang", started.toString())
+        try {
+            runProcessFuture(handler)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!Files.exists(started) && System.nanoTime() < deadline) Thread.sleep(10)
+            assertTrue("The controlled child did not start", Files.exists(started))
+            val pid = handler.process.pid()
+            assertTrue("Unavailable stat must not hide a live child", isExecuting(pid) { stat ->
+                throw NoSuchFileException(stat.toString())
+            })
+            var readAttempted = false
+            assertFalse("A process that exits during observation is not an orphan", isExecuting(pid) { stat ->
+                readAttempted = true
+                stop(handler)
+                assertFalse("The fixture must exit before its stat file is read", handler.process.isAlive)
+                Files.readString(stat)
+            })
+            assertTrue("The regression must reach the stat read while the process is alive", readAttempted)
+        } finally {
+            stop(handler)
+            Files.deleteIfExists(started)
+        }
+    }
+
+    private fun isExecuting(pid: Long, readStat: (Path) -> String = { Files.readString(it) }): Boolean {
         if (!ProcessHandle.of(pid).map { it.isAlive }.orElse(false)) return false
         // Linux PID 1 may retain a killed orphan as a zombie. It has exited and cannot execute;
         // ProcessHandle.isAlive alone does not distinguish that state from an orphan still running.
         val stat = Path.of("/proc", pid.toString(), "stat")
         if (Files.exists(stat)) {
-            val state = Files.readString(stat).substringAfterLast(')').trim().firstOrNull()
+            val state = try {
+                readStat(stat).substringAfterLast(')').trim().firstOrNull()
+            } catch (_: NoSuchFileException) {
+                // A normally exiting child can disappear after the existence check.
+                // Recheck liveness so an unavailable stat never hides a running child.
+                return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
+            }
             return state != 'Z' && state != 'X'
         }
         return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
