@@ -44,14 +44,14 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigDiscoveryRoutingTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 179 named
-tests across 21 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 182 named
+tests across 22 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
@@ -86,6 +86,8 @@ and configuration preservation from an independently reproduced Biome 2.2.3 init
 that can lose an early document open. The replacement still must deliver diagnostics and format
 correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
 in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
+
+The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 

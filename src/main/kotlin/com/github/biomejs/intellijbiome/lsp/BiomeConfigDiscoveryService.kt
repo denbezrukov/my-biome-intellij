@@ -18,6 +18,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -73,7 +74,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
                     val manager = LspServerManager.getInstance(project)
                     val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toSet()
                     if (current != request.servers || captureInputs() != request.inputs ||
-                        current.any { it.state == LspServerState.Initializing }) {
+                        (request.restart && current.any { it.state == LspServerState.Initializing })) {
                         return@withContext false
                     }
                     if (request.restart) {
@@ -102,8 +103,9 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
         if (changedConfigs.isEmpty()) return null
         val servers = LspServerManager.getInstance(project)
             .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+        val fileIndex = ProjectFileIndex.getInstance(project)
         val uncovered = inputs.openFiles.filter { file ->
-            file.isValid && settings.fileSupported(file) &&
+            file.isValid && file.isInLocalFileSystem && fileIndex.isInContent(file) && settings.fileSupported(file) &&
                 changedConfigs.any { VfsUtilCore.isAncestor(it.parent, file, true) } &&
                 servers.none { it.descriptor.isSupportedFile(file) } &&
                 roots.any { root -> VfsUtilCore.isAncestor(root, file, true) && file.findNearestBiomeConfig(root) != null }
@@ -179,6 +181,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
         val interpreter = interpreters.interpreter
         return DiscoveryInputs(
             VirtualFileManager.getInstance().modificationCount,
+            ProjectRootManager.getInstance(project).modificationCount,
             FileEditorManager.getInstance(project).openFiles.toSet(),
             project.getBaseDirectories().toSet(),
             settings.configurationMode, settings.configPath, settings.executablePath,
@@ -195,6 +198,7 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
 
     private data class DiscoveryInputs(
         val vfsModificationCount: Long,
+        val projectRootsModificationCount: Long,
         val openFiles: Set<VirtualFile>,
         val roots: Set<VirtualFile>,
         val mode: ConfigurationMode,

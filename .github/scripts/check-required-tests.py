@@ -46,6 +46,11 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     },
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": {
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
+    },
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": {
         "testCopiedConfigStartsForAlreadyOpenFile",
         "testDeleteAndRecreateConfigStartsOnce",
