@@ -144,6 +144,11 @@ The current fixture includes the SDK's split JSON, Node.js, test-runner, structu
 and library-provider plugins, and uses its Kotlin stdlib without changing production dependencies. Runtime controls reject
 missing or disabled required plugins.
 
+Disk controls await the native file-specific VFS completion barrier on 262, where a document can be marked saved before
+its physical write finishes. The 253 writer is synchronous. Separator document-group controls scope transparent caret
+movement to the fixture and deliberately move the caret in the CRLF redo case; physical bytes and external-write guards
+remain required.
+
 Build and verify the same minimum-compiled archive:
 
 ```shell

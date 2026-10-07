@@ -427,6 +427,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
     }
 
     private fun writeOutsideVfs(file: com.intellij.openapi.vfs.VirtualFile, text: String) {
+        awaitPhysicalFileWrites(file)
         val path = Path.of(file.path)
         val timestamp = file.timeStamp
         Files.writeString(path, text)
@@ -737,6 +738,8 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
 
     private fun diskText(document: Document): String {
         val file = FileDocumentManager.getInstance().getFile(document) ?: error("Document has no backing file")
+        awaitPhysicalFileWrites(file)
         return Files.readString(Path.of(file.path))
     }
+
 }
