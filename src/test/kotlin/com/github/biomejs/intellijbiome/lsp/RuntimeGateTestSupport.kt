@@ -35,4 +35,10 @@ internal class RuntimeGateEvents(project: Project, disposable: Disposable) {
             "Biome diagnostics not received for ${file.path} (version=$version)",
             { diagnostics.any { it.second == file && (version == null || it.first.initializeResult?.serverInfo?.version == version) } }, timeout)
     }
+    fun awaitDiagnostics(file: com.intellij.openapi.vfs.VirtualFile, server: com.intellij.platform.lsp.api.LspServer) {
+        com.intellij.testFramework.PlatformTestUtil.waitWithEventsDispatching(
+            "Replacement Biome server did not send diagnostics for ${file.path}",
+            { diagnostics.any { it.first === server && it.second == file } }, 20)
+    }
+
 }
