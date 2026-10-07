@@ -11,7 +11,6 @@ import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDire
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.ProcessCanceledException
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Computable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.VfsUtil
@@ -20,15 +19,12 @@ import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerDescriptor
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerManagerListener
-import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
 import kotlin.io.path.Path
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import org.eclipse.lsp4j.ClientCapabilities
@@ -100,32 +96,30 @@ private class BiomeLspServerDescriptor(
             manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
                 .find { it.descriptor === this }
         }) ?: throw ProcessCanceledException()
-        val lifetime = Disposer.newDisposable("Biome startup probe")
+        // SDK stop removes this instance from its copy-on-write collection before shutdown.
+        // Poll its supported manager API rather than retaining an internal lifecycle listener.
+        val checkStartupCancellation = {
+            if (manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).none { it === server }) {
+                throw CancellationException("Biome server startup was stopped")
+            }
+        }
         var pendingHandler: OSProcessHandler? = null
         return try {
-            val handler = try {
-                runBlocking {
-                    val startupJob = currentCoroutineContext().job
-                    manager.addLspServerManagerListener(object : LspServerManagerListener {
-                        override fun serverStateChanged(lspServer: LspServer) {
-                            if (lspServer === server && isStopped(lspServer)) {
-                                startupJob.cancel(CancellationException("Biome server startup was stopped"))
-                            }
-                        }
-                    }, lifetime, false)
-                    // Check after subscribing so a stop between the lookup and registration is observed.
-                    if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
-                    val version = BiomePackage(project).versionNumber(probeRun)
-                    currentCoroutineContext().ensureActive()
-                    ProgressManager.checkCanceled()
-                    if (project.isDisposed) throw ProcessCanceledException()
-                    if (isStopped(server)) throw CancellationException("Biome server startup was stopped")
-                    // Backward compatibility for v1; `--config-path` is no longer available in v2.
-                    (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
-                        .also { pendingHandler = it }
-                }
-            } finally {
-                Disposer.dispose(lifetime)
+            val handler = runBlocking {
+                val version = BiomePackage(project).versionNumber(probeRun, checkStartupCancellation)
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                // Backward compatibility for v1; `--config-path` is no longer available in v2.
+                val handler = (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
+                    .also { pendingHandler = it }
+                // Synchronous target preparation can overlap a stop after the preceding guard.
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                handler
             }
             // Until runBlocking returns successfully, cancellation can discard its result.
             // The SDK connector takes ownership only after this method returns.
@@ -142,9 +136,6 @@ private class BiomeLspServerDescriptor(
             }
         }
     }
-
-    private fun isStopped(server: LspServer) = server.state == LspServerState.ShutdownNormally
-        || server.state == LspServerState.ShutdownUnexpectedly
 
     override fun isSupportedFile(file: VirtualFile): Boolean {
         return BiomeSettings.getInstance(project).fileSupported(file)

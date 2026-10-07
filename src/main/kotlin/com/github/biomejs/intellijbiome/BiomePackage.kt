@@ -67,11 +67,13 @@ class BiomePackage(private val project: Project) {
     }
 
     /** Collects the version of precisely the executable and target selected by the caller. */
-    suspend fun versionNumber(targetRun: BiomeTargetRun): String {
+    suspend fun versionNumber(targetRun: BiomeTargetRun): String = versionNumber(targetRun) {}
+
+    suspend fun versionNumber(targetRun: BiomeTargetRun, checkStartupCancellation: () -> Unit): String {
         var handler: OSProcessHandler? = null
         var future: CompletableFuture<ProcessResult>? = null
         try {
-            checkProbeCancellation()
+            checkProbeCancellation(checkStartupCancellation)
             // SDK target preparation is synchronous; the deadline bounds result collection.
             val process = targetRun.startProcess()
             handler = process
@@ -79,10 +81,10 @@ class BiomePackage(private val project: Project) {
             future = collection
             val result = withTimeoutOrNull(5_000) {
                 while (!collection.isDone) {
-                    checkProbeCancellation()
+                    checkProbeCancellation(checkStartupCancellation)
                     delay(25)
                 }
-                checkProbeCancellation()
+                checkProbeCancellation(checkStartupCancellation)
                 collection.await()
             } ?: throw ExecutionException("Biome version probe exceeded 5000 ms")
             val output = result.processOutput
@@ -104,10 +106,11 @@ class BiomePackage(private val project: Project) {
         }
     }
 
-    private suspend fun checkProbeCancellation() {
+    private suspend fun checkProbeCancellation(checkStartupCancellation: () -> Unit) {
         coroutineContext.ensureActive()
         ProgressManager.checkCanceled()
         if (project.isDisposed) throw ProcessCanceledException()
+        checkStartupCancellation()
     }
 
     fun binaryPath(
