@@ -154,7 +154,7 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
         project.replaceService(BiomeConfigDiscoveryService::class.java,
             BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
         externalConfig(config)
-        dispatcher.runPendingReads()
+        dispatcher.runPendingReads(discoveryScope)
         openSource()
         assertFormatting()
         val original = servers().single()
@@ -172,7 +172,7 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
         assertFalse("The repaired nested config must make the ancestor request a recovery restart",
             original.descriptor.isSupportedFile(nested))
         // Finish the pooled read while holding EDT, then change the actual Manual selection.
-        dispatcher.runPendingReads()
+        dispatcher.runPendingReads(discoveryScope, expectEdt = true)
         if (changeExecutable) BiomeSettings.getInstance(project).executablePath = replacementExecutable!!
         else BiomeSettings.getInstance(project).configPath = explicitConfig
         settle()
@@ -190,32 +190,6 @@ class BiomeManualConfigRecoveryLspTest : BiomeLspFixtureTestCase() {
             assertFormatting("2.5.15")
             assertSame(editor, myFixture.editor)
             assertEquals(editors, FileEditorManager.getInstance(project).getEditors(nested).toList())
-        }
-    }
-
-    private class QueuedDiscoveryDispatcher : CoroutineDispatcher() {
-        private val queue = java.util.concurrent.LinkedBlockingQueue<Runnable>()
-        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.add(block) }
-
-        fun drainCancelledTasks() {
-            while (true) (queue.poll() ?: return).run()
-        }
-
-        fun runPendingReads() {
-            val application = com.intellij.openapi.application.ApplicationManager.getApplication()
-            check(application.isDispatchThread && !application.isWriteAccessAllowed)
-            repeat(2) {
-                val task = checkNotNull(queue.poll(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                    "Manual discovery did not resume after its pooled read"
-                }
-                application.executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
-            }
-        }
-
-        fun runNextPendingTask() {
-            val task = queue.poll() ?: return
-            com.intellij.openapi.application.ApplicationManager.getApplication()
-                .executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
         }
     }
 
