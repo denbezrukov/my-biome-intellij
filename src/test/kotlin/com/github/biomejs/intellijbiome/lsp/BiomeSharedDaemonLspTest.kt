@@ -24,7 +24,8 @@ import com.intellij.util.EnvironmentUtil
 import kotlinx.coroutines.*
 import java.nio.file.Files
 
-@TestNpmPackage("@biomejs/biome@2.2.3")
+// Isolate client/daemon lifecycle from Biome 2.2.3's upstream early-open registration defect.
+@TestNpmPackage("@biomejs/biome@2.5.15")
 class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
     private lateinit var root: VirtualFile
     private lateinit var source: VirtualFile
@@ -45,8 +46,8 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
     private fun establishPrimaryServer(): LspServer {
         myFixture.configureFromExistingVirtualFile(source)
         waitUntilFileOpenedByLspServer(project, source, timeout = 20)
-        // Biome 2.2.3 may register its first document after initialization. Establish
-        // readiness before testing restart; never reopen either file after that action.
+        // Establish initial document readiness before testing restart; never reopen
+        // either file after that action.
         try {
             events.awaitDiagnostics(source, timeout = 5)
         } catch (_: AssertionError) {
@@ -57,7 +58,7 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             events.awaitDiagnostics(source)
         }
         val original = servers().single { it.descriptor.roots.single() == root }
-        assertEquals("2.2.3", original.initializeResult?.serverInfo?.version)
+        assertEquals("2.5.15", original.initializeResult?.serverInfo?.version)
         formatAndAssert()
         WriteCommandAction.runWriteCommandAction(project) { myFixture.editor.document.setText("const message=\"hello\";\n") }
         FileDocumentManager.getInstance().saveDocument(myFixture.editor.document)
@@ -122,7 +123,7 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             awaitInitialReadiness(other, otherProject, otherFixture, otherEvents)
             val otherManager = LspServerManager.getInstance(otherProject)
             val otherServer = otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
-            assertEquals("2.2.3", otherServer.initializeResult?.serverInfo?.version)
+            assertEquals("2.5.15", otherServer.initializeResult?.serverInfo?.version)
             assertFormattingResponse(otherServer, other, "const other = 1;\n")
             val before = processes(root, otherRoot)
             val originalProxies = before.filter { it.command.contains(" lsp-proxy") && it.command.contains(root.path) }
@@ -139,12 +140,14 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
             logProcesses("After primary restart", processes(root, otherRoot))
             assertEquals(listOf(otherServer), otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
             assertEquals(LspServerState.Running, otherServer.state)
-            assertEquals("2.2.3", otherServer.initializeResult?.serverInfo?.version)
+            assertEquals("2.5.15", otherServer.initializeResult?.serverInfo?.version)
+            // The shared daemon can cancel reads while replacement didOpen writes
+            // document state. Establish recovery before querying the other client.
+            waitUntilFileOpenedByLspServer(project, source, timeout = 20)
+            events.awaitDiagnostics(source, replacement)
             assertFormattingResponse(otherServer, other, "const other = 1;\n")
             assertTrue("Restart must preserve the shared daemon process", isExecuting(daemon.pid))
             awaitExit("Old primary wrapper/native proxy survived restart", originalProxies)
-            waitUntilFileOpenedByLspServer(project, source, timeout = 20)
-            events.awaitDiagnostics(source, replacement)
             formatAndAssert()
 
             val replacementProxies = processes(root, otherRoot).filter {
