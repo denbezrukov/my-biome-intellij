@@ -4,6 +4,12 @@ import com.github.biomejs.intellijbiome.services.BiomeServerService
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspServer
+import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import kotlinx.coroutines.*
@@ -11,6 +17,7 @@ import org.junit.Assert.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal const val MANUAL_CONFIG_FIXTURE = "manual-config-selection"
 private const val DESCRIPTOR = "com.github.biomejs.intellijbiome.lsp.BiomeLspServerDescriptor"
@@ -59,18 +66,44 @@ internal fun runBiomeCommand(arguments: List<String>, directory: Path, input: St
 
 internal fun CodeInsightTestFixture.formatManualConfig(expectedName: String, sourceName: String = "index.js") {
     val source = findFileInTempDir(sourceName) ?: error("Missing fixture: $sourceName")
-    configureFromExistingVirtualFile(source)
-    waitUntilFileOpenedByLspServer(project, source, DESCRIPTOR, timeout = 30)
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.EDT)
-    val formatting = scope.async {
-        withTimeout(30_000) { project.service<BiomeServerService>().format(editor.document) }
-    }
+    val readinessDisposable = Disposer.newDisposable()
+    val diagnosticsReceived = AtomicBoolean()
+    LspServerManager.getInstance(project).addLspServerManagerListener(object : LspServerManagerListener {
+        override fun diagnosticsReceived(lspServer: LspServer, file: VirtualFile) {
+            if (lspServer.descriptor.javaClass.name == DESCRIPTOR && file == source) {
+                diagnosticsReceived.set(true)
+            }
+        }
+    }, readinessDisposable, true)
     try {
-        PlatformTestUtil.waitWithEventsDispatching("Biome formatting did not finish in 30 seconds",
-            { formatting.isCompleted }, 30)
-        runBlocking { formatting.await() }
-        assertEquals(Files.readString(Path.of(testDataPath, MANUAL_CONFIG_FIXTURE, expectedName)), editor.document.text)
+        configureFromExistingVirtualFile(source)
+        waitUntilFileOpenedByLspServer(project, source, DESCRIPTOR, timeout = 30)
+        try {
+            PlatformTestUtil.waitWithEventsDispatching("Biome did not publish initial diagnostics",
+                { diagnosticsReceived.get() }, 5)
+        } catch (_: AssertionError) {
+            // Biome can miss the first didOpen while initializing workspace configuration.
+            // Match the existing highlighting fixture: reopen once, then require diagnostics.
+            // Keep the listener registered throughout so fast diagnostics cannot be missed.
+            FileEditorManager.getInstance(project).closeFile(source)
+            configureFromExistingVirtualFile(source)
+            waitUntilFileOpenedByLspServer(project, source, DESCRIPTOR, timeout = 30)
+            PlatformTestUtil.waitWithEventsDispatching("Biome did not publish diagnostics after reopening",
+                { diagnosticsReceived.get() }, 25)
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.EDT)
+        val formatting = scope.async {
+            withTimeout(30_000) { project.service<BiomeServerService>().format(editor.document) }
+        }
+        try {
+            PlatformTestUtil.waitWithEventsDispatching("Biome formatting did not finish in 30 seconds",
+                { formatting.isCompleted }, 30)
+            runBlocking { formatting.await() }
+            assertEquals(Files.readString(Path.of(testDataPath, MANUAL_CONFIG_FIXTURE, expectedName)), editor.document.text)
+        } finally {
+            scope.cancel()
+        }
     } finally {
-        scope.cancel()
+        Disposer.dispose(readinessDisposable)
     }
 }

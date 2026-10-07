@@ -8,6 +8,7 @@ import com.intellij.lang.javascript.JavaScriptBundle
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.BoundSearchableConfigurable
+import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
@@ -41,6 +42,15 @@ class BiomeConfigurable(internal val project: Project) :
     private lateinit var automaticConfiguration: JRadioButton
     private lateinit var manualConfiguration: JRadioButton
     private lateinit var extensionsField: JBTextField
+    private lateinit var configPathField: TextFieldWithBrowseButton
+
+    override fun apply() {
+        createComponent()
+        if (manualConfiguration.isSelected) {
+            validateConfigPath(configPathField)?.let { throw ConfigurationException(it.message) }
+        }
+        super.apply()
+    }
 
     override fun createPanel(): DialogPanel {
         val settings: BiomeSettings = BiomeSettings.getInstance(project)
@@ -100,13 +110,14 @@ class BiomeConfigurable(internal val project: Project) :
                 }.visibleIf(manualConfiguration.selected)
 
                 row(BiomeBundle.message("biome.config.path.label")) {
-                    textFieldWithBrowseButton(
+                    configPathField = textFieldWithBrowseButton(
                         BiomeBundle.message("biome.config.path.label"),
                         project,
                     ) { fileChosen(it) }.bindText(settings::configPath)
                         .validationOnInput { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
                         .validationOnApply { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
                         .comment(BiomeBundle.message("biome.config.path.help"))
+                        .component
                 }.visibleIf(manualConfiguration.selected)
             }
 
