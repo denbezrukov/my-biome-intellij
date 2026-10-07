@@ -17,6 +17,7 @@ import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.replaceService
 import kotlinx.coroutines.*
 import java.util.concurrent.CopyOnWriteArrayList
 import java.nio.file.Files
@@ -63,6 +64,70 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
     fun testRepairAfterDependencyRefreshRestoresIndependentWorkspace() = checkMalformedRestartRepair(dependencyRefresh = true)
     fun testDisabledModeDoesNotRecoverNestedConfig() = checkMalformedRestartRepair(mode = ConfigurationMode.DISABLED)
     fun testManualModeDoesNotRecoverNestedConfig() = checkMalformedRestartRepair(mode = ConfigurationMode.MANUAL)
+
+    fun testClosedEditorInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = true)
+    fun testMalformedConfigInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = false)
+
+    private fun checkQueuedRecoveryInvalidation(closeEditor: Boolean) {
+        val dispatcher = QueuedDiscoveryDispatcher()
+        val discoveryScope = CoroutineScope(SupervisorJob() + dispatcher)
+        com.intellij.openapi.util.Disposer.register(testRootDisposable) {
+            discoveryScope.cancel()
+            dispatcher.drainCancelledTasks()
+        }
+        project.replaceService(BiomeConfigDiscoveryService::class.java,
+            BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
+        exercise(parentFirst = true)
+        orderOpenFiles(parentFirst = true)
+        val manager = LspServerManager.getInstance(project)
+        val original = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val config = childFile.parent.toNioPath().resolve("biome.json")
+        val valid = Files.readString(config)
+        Files.writeString(config, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        dispatcher.runPendingReads()
+        project.service<BiomeServerService>().restartBiomeServer()
+        PlatformTestUtil.waitWithEventsDispatching("Malformed restart did not establish the parent-only precondition", {
+            val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            current.size == 1 && current.none { it in original } && current.single().initializeResult != null
+        }, 20)
+        val beforeRepair = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        Files.writeString(config, valid)
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        assertFalse(beforeRepair.single().descriptor.isSupportedFile(childFile))
+        // The real recovery coroutine finishes its pooled read, then suspends on the held EDT.
+        // No event dispatch is allowed between this barrier and the invalidating change.
+        dispatcher.runPendingReads()
+        if (closeEditor) FileEditorManager.getInstance(project).closeFile(childFile)
+        else {
+            Files.writeString(config, "{broken-again")
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+            assertTrue(beforeRepair.single().descriptor.isSupportedFile(childFile))
+        }
+        settleServers(beforeRepair)
+    }
+
+    private class QueuedDiscoveryDispatcher : CoroutineDispatcher() {
+        private val queue = java.util.concurrent.LinkedBlockingQueue<Runnable>()
+        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.add(block) }
+
+        fun drainCancelledTasks() {
+            while (true) (queue.poll() ?: return).run()
+        }
+
+        fun runPendingReads() {
+            val application = com.intellij.openapi.application.ApplicationManager.getApplication()
+            check(application.isDispatchThread && !application.isWriteAccessAllowed)
+            // readAction executes on Dispatchers.Default, then returns to this dispatcher.
+            // Running its returned continuation reaches withContext(EDT) before this barrier returns.
+            repeat(2) {
+                val task = checkNotNull(queue.poll(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    "Discovery did not resume after its pooled read"
+                }
+                application.executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
+            }
+        }
+    }
 
     fun testNestedRepairPreservesAnotherProjectServer() {
         exercise(parentFirst = true)
