@@ -68,6 +68,25 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
     fun testClosedEditorInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = true)
     fun testMalformedConfigInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = false)
 
+    fun testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension() {
+        val dispatcher = QueuedDiscoveryDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        var reachedEdt = false
+        try {
+            scope.launch {
+                // withContext can return without suspension when its work finishes inline.
+                withContext(CoroutineName("completed-read")) { Unit }
+                withContext(Dispatchers.EDT) { reachedEdt = true }
+            }
+            dispatcher.runPendingReads(scope, expectEdt = true)
+            assertFalse("The barrier must leave the EDT action queued", reachedEdt)
+            PlatformTestUtil.waitWithEventsDispatching("Queued EDT action never ran", { reachedEdt }, 5)
+        } finally {
+            scope.cancel()
+            dispatcher.drainCancelledTasks()
+        }
+    }
+
     private fun checkQueuedRecoveryInvalidation(closeEditor: Boolean) {
         val dispatcher = QueuedDiscoveryDispatcher()
         val discoveryScope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -85,7 +104,7 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         val valid = Files.readString(config)
         Files.writeString(config, "{broken")
         VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
-        dispatcher.runPendingReads()
+        dispatcher.runPendingReads(discoveryScope)
         project.service<BiomeServerService>().restartBiomeServer()
         PlatformTestUtil.waitWithEventsDispatching("Malformed restart did not establish the parent-only precondition", {
             val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
@@ -97,7 +116,7 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         assertFalse(beforeRepair.single().descriptor.isSupportedFile(childFile))
         // The real recovery coroutine finishes its pooled read, then suspends on the held EDT.
         // No event dispatch is allowed between this barrier and the invalidating change.
-        dispatcher.runPendingReads()
+        dispatcher.runPendingReads(discoveryScope, expectEdt = true)
         if (closeEditor) FileEditorManager.getInstance(project).closeFile(childFile)
         else {
             Files.writeString(config, "{broken-again")
@@ -107,32 +126,17 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         settleServers(beforeRepair)
     }
 
-    private class QueuedDiscoveryDispatcher : CoroutineDispatcher() {
-        private val queue = java.util.concurrent.LinkedBlockingQueue<Runnable>()
-        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.add(block) }
-
-        fun drainCancelledTasks() {
-            while (true) (queue.poll() ?: return).run()
-        }
-
-        fun runPendingReads() {
-            val application = com.intellij.openapi.application.ApplicationManager.getApplication()
-            check(application.isDispatchThread && !application.isWriteAccessAllowed)
-            // readAction executes on Dispatchers.Default, then returns to this dispatcher.
-            // Running its returned continuation reaches withContext(EDT) before this barrier returns.
-            repeat(2) {
-                val task = checkNotNull(queue.poll(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                    "Discovery did not resume after its pooled read"
-                }
-                application.executeOnPooledThread(task).get(5, java.util.concurrent.TimeUnit.SECONDS)
-            }
-        }
-    }
-
     fun testNestedRepairPreservesAnotherProjectServer() {
         exercise(parentFirst = true)
         FileDocumentManager.getInstance().saveAllDocuments()
         com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        // Register primary-project editor listeners and package.json pointers before
+        // the secondary fixture takes its global leak-tracking snapshot.
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
+        for (file in listOf(childFile, parentFile)) {
+            myFixture.configureFromExistingVirtualFile(file)
+            myFixture.doHighlighting()
+        }
         val factory = com.intellij.testFramework.fixtures.IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-other-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)
