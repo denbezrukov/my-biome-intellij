@@ -32,6 +32,7 @@ import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -282,6 +283,155 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
     fun testLfOnlyEditPersists() = checkSeparatorOnlyEdit("\r\n", "\n")
 
     fun testSeparatorPersistsWhenEarlierEditsReturnToSavedText() = checkSeparatorOnlyEdit("\n", "\r\n", true)
+
+    fun testTextAndCrLfFormattingUndoRedoRestoresBytes() = checkTextAndSeparatorUndoRedo("\n", "\r\n")
+
+    fun testTextAndLfFormattingUndoRedoRestoresBytes() = checkTextAndSeparatorUndoRedo("\r\n", "\n")
+
+    private fun checkTextAndSeparatorUndoRedo(originalSeparator: String, requestedSeparator: String) {
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val input = "const value=2;\n"
+        val formatted = "const value = 2;\n"
+        val boundaryBytes = AtomicReference<String>()
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> {
+                    boundaryBytes.set(diskText(document))
+                    return listOf(TextEdit(Range(Position(0, 0), Position(1, 0)), formatted.replace("\n", requestedSeparator)))
+                }
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = originalSeparator
+            document.setText(input)
+        }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals(input.replace("\n", originalSeparator), boundaryBytes.get())
+        assertEquals(formatted.replace("\n", requestedSeparator), diskText(document))
+        assertEquals(formatted, document.text)
+        BiomeSettings.getInstance(project).formatOnSave = false
+        val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
+        val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
+        undo.undo(editor)
+        assertEquals(input, document.text)
+        FileDocumentManager.getInstance().saveDocument(document)
+        assertEquals("Undo and save must restore both text and separators", input.replace("\n", originalSeparator), diskText(document))
+        assertTrue(undo.isRedoAvailable(editor))
+        undo.redo(editor)
+        assertEquals(formatted, document.text)
+        FileDocumentManager.getInstance().saveDocument(document)
+        assertEquals("Redo and save must restore both text and separators", formatted.replace("\n", requestedSeparator), diskText(document))
+    }
+
+    fun testSeparatorOnlyFormattingPreservesExternalDiskWrite() {
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val input = "const value = 2;\n"
+        val external = "const external = 99;\n"
+        val boundaryBytes = AtomicReference<String>()
+        val cachedBytes = AtomicReference<String>()
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> {
+                    boundaryBytes.set(diskText(document))
+                    assertEquals(input, String(file.contentsToByteArray(), Charsets.UTF_8))
+                    writeOutsideVfs(file, external)
+                    assertEquals(external, diskText(document))
+                    cachedBytes.set(String(file.contentsToByteArray(), Charsets.UTF_8))
+                    return listOf(TextEdit(Range(Position(0, 0), Position(1, 0)), input.replace("\n", "\r\n")))
+                }
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = "\n"
+            document.setText(input)
+        }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals(input, boundaryBytes.get())
+        assertEquals("Raw disk writes must remain invisible to cached VFS content in this regression", input, cachedBytes.get())
+        assertEquals("A stale formatting response must preserve the external disk edit", external, diskText(document))
+    }
+
+    fun testDocumentSaveDetectsExternalDiskWrite() {
+        val document = openDocuments().last()
+        val manager = FileDocumentManager.getInstance()
+        val file = manager.getFile(document)!!
+        val input = "const value = 2;\n"
+        val external = "const external = 99;\n"
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = "\n"
+            document.setText(input)
+        }
+        manager.saveDocument(document)
+        assertEquals(input, diskText(document))
+        assertEquals(input, String(file.contentsToByteArray(), Charsets.UTF_8))
+        val asked = java.util.concurrent.atomic.AtomicBoolean()
+        (manager as com.intellij.openapi.fileEditor.impl.FileDocumentManagerImpl).setAskReloadFromDisk(testRootDisposable,
+            object : com.intellij.openapi.fileEditor.impl.MemoryDiskConflictResolver() {
+                override fun askReloadFromDisk(file: com.intellij.openapi.vfs.VirtualFile, document: Document): Boolean {
+                    asked.set(true)
+                    return true
+                }
+            })
+        WriteCommandAction.runWriteCommandAction(project) { document.setText("const value = 3;\n") }
+        writeOutsideVfs(file, external)
+        assertEquals(input, String(file.contentsToByteArray(), Charsets.UTF_8))
+        manager.saveDocument(document)
+        PlatformTestUtil.waitWithEventsDispatching("Normal save must detect the external-write conflict", { asked.get() }, 10)
+        assertEquals(external, diskText(document))
+        assertEquals(external, document.text)
+    }
+
+    fun testSeparatorUndoPreservesExternalDiskWrite() = checkSeparatorHistoryPreservesExternalWrite(false)
+
+    fun testSeparatorRedoPreservesExternalDiskWrite() = checkSeparatorHistoryPreservesExternalWrite(true)
+
+    private fun checkSeparatorHistoryPreservesExternalWrite(redo: Boolean) {
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val input = "const value = 2;\n"
+        val external = "const external = 99;\n"
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> =
+                    listOf(TextEdit(Range(Position(0, 0), Position(1, 0)), input.replace("\n", "\r\n")))
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = "\n"
+            document.setText(input)
+        }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals(input.replace("\n", "\r\n"), diskText(document))
+        val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
+        val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
+        if (redo) undo.undo(editor)
+        val beforeExternalWrite = diskText(document)
+        assertEquals(beforeExternalWrite, String(file.contentsToByteArray(), Charsets.UTF_8))
+        writeOutsideVfs(file, external)
+        assertEquals(beforeExternalWrite, String(file.contentsToByteArray(), Charsets.UTF_8))
+        val reported = AtomicReference<com.intellij.openapi.command.undo.UnexpectedUndoException>()
+        val reports = com.intellij.openapi.command.impl.UndoReportHandler.EP_NAME
+        val handler = object : com.intellij.openapi.command.impl.UndoReportHandler by reports.extensionList.first() {
+            override fun reportException(project: com.intellij.openapi.project.Project?, exception: com.intellij.openapi.command.undo.UnexpectedUndoException, isUndo: Boolean): Boolean {
+                reported.set(exception)
+                return true
+            }
+        }
+        com.intellij.testFramework.ExtensionTestUtil.maskExtensions(reports, listOf(handler), testRootDisposable)
+        if (redo) undo.redo(editor) else undo.undo(editor)
+        assertEquals("Undo/redo must not overwrite external disk changes", external, diskText(document))
+        assertNotNull("An unsafe separator conversion must report the undo failure", reported.get())
+        assertTrue(reported.get().message.orEmpty().contains(file.name))
+    }
+
+    private fun writeOutsideVfs(file: com.intellij.openapi.vfs.VirtualFile, text: String) {
+        val path = Path.of(file.path)
+        val timestamp = file.timeStamp
+        Files.writeString(path, text)
+        Files.setLastModifiedTime(path, FileTime.fromMillis(timestamp + 10_000))
+    }
 
     private fun checkSeparatorOnlyEdit(originalSeparator: String, requestedSeparator: String, earlierEdit: Boolean = false) {
         val document = openDocuments().last()

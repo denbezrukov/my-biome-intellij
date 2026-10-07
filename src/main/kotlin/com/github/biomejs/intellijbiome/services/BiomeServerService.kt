@@ -21,6 +21,7 @@ import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.newvfs.NewVirtualFileSystem
 import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.customization.LspIntentionAction
@@ -95,7 +96,7 @@ class BiomeServerService internal constructor(
                 )
             }
             val actions = requests.codeActions(server, params)
-            if (!applyIfCurrent(document, stamp, commandName) {
+            if (!applyIfCurrent(document, file, stamp, commandName) {
                     actions?.forEach { result ->
                         if (result.isRight) {
                             val action = LspIntentionAction(server, result.right)
@@ -114,13 +115,14 @@ class BiomeServerService internal constructor(
             }
             val edits = requests.formatting(server, params)
             if (!edits.isNullOrEmpty()) {
-                applyIfCurrent(document, stamp, commandName) { applyFormatting(document, file, edits) }
+                applyIfCurrent(document, file, stamp, commandName) { applyFormatting(document, file, edits) }
             }
         }
     }
 
     private suspend fun applyIfCurrent(
         document: Document,
+        file: VirtualFile,
         stamp: Long,
         commandName: String,
         apply: () -> Unit,
@@ -131,7 +133,7 @@ class BiomeServerService internal constructor(
             context.ensureActive()
             ProgressManager.checkCanceled()
             if (project.isDisposed) throw ProcessCanceledException()
-            if (document.modificationStamp != stamp) false
+            if (document.modificationStamp != stamp || !isFileCurrent(file)) false
             else {
                 apply()
                 true
@@ -174,32 +176,50 @@ class BiomeServerService internal constructor(
     private fun applyLineSeparator(document: Document, file: VirtualFile, separator: String) {
         if (file.detectedLineSeparator == separator) return
         val manager = FileDocumentManager.getInstance()
-        val textChanged = manager.isDocumentUnsaved(document) &&
-            !StringUtil.equals(document.charsSequence,
-                LoadTextUtil.getTextByBinaryPresentation(file.contentsToByteArray(), file, false, false))
-        if (textChanged) {
-            // Text edits will be persisted by the platform's final save.
-            file.detectedLineSeparator = separator
-            return
-        }
-
-        // The final save skips equal normalized text, even when the document is
-        // dirty. Convert through the platform inside the guarded write command;
-        // the conversion action wrapper would recursively save the document.
         val previousSeparator = manager.getLineSeparator(file, project)
-        LoadTextUtil.changeLineSeparators(project, file, separator, manager)
+        if (!changeLineSeparatorIfCurrent(document, file, separator, manager)) return
         UndoManager.getInstance(project).undoableActionPerformed(object : BasicUndoableAction(document) {
             override fun undo() = restoreSeparator(previousSeparator)
             override fun redo() = restoreSeparator(separator)
 
             private fun restoreSeparator(value: String) {
                 try {
-                    LoadTextUtil.changeLineSeparators(project, file, value, manager)
+                    if (!changeLineSeparatorIfCurrent(document, file, value, manager)) {
+                        throw UnexpectedUndoException(BiomeBundle.message("biome.undo.file.changed", file.presentableUrl))
+                    }
                 } catch (failure: IOException) {
                     throw UnexpectedUndoException(failure.message ?: failure.toString()).apply { initCause(failure) }
                 }
             }
         })
+    }
+
+    private fun changeLineSeparatorIfCurrent(
+        document: Document,
+        file: VirtualFile,
+        separator: String,
+        manager: FileDocumentManager,
+    ): Boolean {
+        if (!isFileCurrent(file)) return false
+        val textChanged = manager.isDocumentUnsaved(document) &&
+            !StringUtil.equals(document.charsSequence,
+                LoadTextUtil.getTextByBinaryPresentation(file.contentsToByteArray(), file, false, false))
+        if (textChanged) {
+            // Text edits and their separator metadata reach disk in the platform's final save.
+            file.detectedLineSeparator = separator
+        } else {
+            // Equal normalized text is skipped by the final save. The direct conversion
+            // must check disk freshness too; cached VFS bytes can hide an external write.
+            if (!isFileCurrent(file)) return false
+            LoadTextUtil.changeLineSeparators(project, file, separator, manager)
+        }
+        return true
+    }
+
+    private fun isFileCurrent(file: VirtualFile): Boolean {
+        if (!file.isValid) return false
+        val fileSystem = file.fileSystem
+        return fileSystem !is NewVirtualFileSystem || file.timeStamp == fileSystem.getTimeStamp(file)
     }
 
     fun notifyRestart() {

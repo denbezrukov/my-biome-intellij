@@ -45,6 +45,7 @@ REQUIRED_TESTS = {
         "testCancellationBeforeWriteDoesNotMutate",
         "testCancellationWhileWriteIsQueuedDoesNotMutate",
         "testCrLfOnlyEditPersists",
+        "testDocumentSaveDetectsExternalDiskWrite",
         "testEnabledFeaturesRunInOrderAndPersist",
         "testIdeFormatOnSaveOrderingAndUndo",
         "testLfOnlyEditPersists",
@@ -57,7 +58,12 @@ REQUIRED_TESTS = {
         "testSaveAllContinuesAfterFileTimeout",
         "testSavePreservesCrLfBytes",
         "testSavePreservesLfBytes",
+        "testSeparatorOnlyFormattingPreservesExternalDiskWrite",
         "testSeparatorPersistsWhenEarlierEditsReturnToSavedText",
+        "testSeparatorRedoPreservesExternalDiskWrite",
+        "testSeparatorUndoPreservesExternalDiskWrite",
+        "testTextAndCrLfFormattingUndoRedoRestoresBytes",
+        "testTextAndLfFormattingUndoRedoRestoresBytes",
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
     ),
@@ -105,7 +111,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("47 required tests across 8 classes", result.stdout)
+            self.assertIn("53 required tests across 8 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
