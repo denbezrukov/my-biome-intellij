@@ -1,14 +1,127 @@
-name: Integrate
+name: Publish
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      nightly:
+        type: boolean
+        default: true
+        required: false
+        description: 'Build a nightly version'
+      publish:
+        type: boolean
+        default: false
+        required: false
+        description: 'Explicitly create a GitHub draft release after validation'
+
+permissions:
+  contents: read
 
 jobs:
-  supported-ide-compatibility:
-    name: Supported IDE compatibility
+  prepare-version:
+    name: Select release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python for release regression tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install workflow test parser
+        run: python3 -m pip install PyYAML==6.0.3
+      - name: Test release artifact and publication gates
+        run: |
+          python3 .github/scripts/test-release-artifact.py
+          python3 .github/scripts/test-publish-draft.py
+      - name: Select version without changing project properties
+        id: version
+        env:
+          NIGHTLY: ${{ inputs.nightly }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: >-
+          python3 .github/scripts/release-artifact.py version
+          --properties gradle.properties --nightly "$NIGHTLY" --sha "$COMMIT_SHA"
+
+  compatibility:
+    name: Verify release artifact
+    needs: [prepare-version]
     uses: ./.github/workflows/_compatibility.yaml
     with:
-      artifact: false
+      version: ${{ needs.prepare-version.outputs.version }}
+      artifact: true
+
+  validate-release:
+    name: Validate release dry run
+    needs: [compatibility]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download verified artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.compatibility.outputs.artifact-name }}
+          path: build/verified-release
+      - name: Validate intended upload and record provenance
+        id: validate
+        env:
+          RELEASE_VERSION: ${{ needs.compatibility.outputs.version }}
+          RELEASE_SHA256: ${{ needs.compatibility.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/verified-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - name: Upload dry-run release record
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-record-${{ needs.compatibility.outputs.version }}
+          path: build/release-record.json
+          if-no-files-found: error
+
+  publish-github-release:
+    name: Publish GitHub draft release
+    if: inputs.publish
+    needs: [compatibility, validate-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-draft-${{ needs.compatibility.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download the same verified artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.compatibility.outputs.artifact-name }}
+          path: build/verified-release
+      - name: Revalidate exact upload input
+        id: validate
+        env:
+          RELEASE_VERSION: ${{ needs.compatibility.outputs.version }}
+          RELEASE_SHA256: ${{ needs.compatibility.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/verified-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - name: Create a new draft with the exact verified ZIP
+        id: create-draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ARCHIVE: ${{ steps.validate.outputs.archive }}
+          RELEASE_SHA256: ${{ steps.validate.outputs.sha256 }}
+          RELEASE_VERSION: ${{ needs.compatibility.outputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_NIGHTLY: ${{ inputs.nightly }}
+        run: >-
+          python3 .github/scripts/publish-draft.py
+          --repository "$RELEASE_REPOSITORY" --sha "$RELEASE_COMMIT"
+          --version "$RELEASE_VERSION" --archive "$RELEASE_ARCHIVE"
+          --sha256 "$RELEASE_SHA256" --nightly "$RELEASE_NIGHTLY"
