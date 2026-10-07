@@ -46,13 +46,19 @@ class BiomeStartupProbeTest : BasePlatformTestCase() {
     }
 
     fun testVersionOutputIdentifiesV1AndV2() = runBlocking {
-        for (version in listOf("1.9.4", "2.2.3")) {
+        for (version in listOf(
+            "1.9.4", "2.2.3", "1.9.4-rc.2", "2.2.3-nightly.20261007+abc123",
+            "2.2.3-nightly.20261008+abc123", "2.2.3+001",
+        )) {
             assertEquals(version, BiomePackage(project).versionNumber(run("exit", "Version: $version", "0")))
         }
     }
 
     fun testInvalidVersionAndNonzeroExitRemainFailures() = runBlocking {
-        for ((output, exit) in listOf("not a version" to "0", "Version: 2.2.3" to "23")) {
+        for ((output, exit) in listOf(
+            "not a version" to "0", "Version: 2.2.3" to "23",
+            "Version: 2.2.3-nightly..1" to "0", "Version: 2.2.3+" to "0",
+        )) {
             try {
                 BiomePackage(project).versionNumber(run("exit", output, exit))
                 fail("Invalid or unsuccessful version probes must fail")
