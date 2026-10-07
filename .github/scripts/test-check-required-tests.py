@@ -60,11 +60,19 @@ REQUIRED_TESTS = {
         "testUnsupportedFileDoesNotStartAfterConfigCreation",
     ),
     PACKAGE + "lsp.BiomeDependencyRefreshLifecycleTest": (
+        "testBrokenProspectivePackagePreservesServerDuringOriginalUpgrade",
         "testChangedPrereleaseIsAdoptedOnce",
         "testClosedFailedRootDoesNotBlockHealthyRootUpgrade",
+        "testClosedParentDoesNotBlockNestedRootUpgrade",
+        "testClosedStartupFileRetainsSameRootPackageSelection",
+        "testDeletedStartupFileRetainsPackageDiscoveryContext",
         "testInterpreterChangeDuringProbePreservesWorkingServer",
+        "testMalformedOpenRootWithNonRootFallbackStillBlocksUnsafeRestart",
+        "testNestedPackageWithinOneConfigRootKeepsFileSpecificSelection",
         "testReopenedIdleRootIsVerifiedBeforeProjectRestart",
         "testSupersedingInstallEventInvalidatesSuccessfulOlderProbeImmediately",
+        "testTwoPackagesInOneRootDoNotChangeStartupSelection",
+        "testUnchangedNestedRootVersionsKeepBothServers",
         "testUnchangedPrereleaseDoesNotRestart",
     ),
     PACKAGE + "lsp.BiomeDependencyUpgradeLspTest": (
@@ -238,7 +246,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("154 required tests across 21 classes", result.stdout)
+            self.assertIn("162 required tests across 21 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

@@ -87,6 +87,185 @@ class BiomeDependencyRefreshLifecycleTest : BiomeLspFixtureTestCase() {
         settleUnchanged(listOf(replacement))
     }
 
+
+    fun testUnchangedNestedRootVersionsKeepBothServers() {
+        val outer = createRoot("outer", "2.2.3")
+        var inner = createRoot("outer/inner", "2.5.15")
+        val originalInner = open(inner)
+        val originalOuter = open(outer)
+        inner = firstOpenFile(inner)
+        assertEquals(setOf(originalInner, originalOuter), servers().toSet())
+        outer.write("probe-scripts.txt", "")
+        inner.write("probe-scripts.txt", "")
+
+        dependencyEvent(outer)
+        awaitProbe(outer)
+        awaitProbe(inner)
+        settleUnchanged(listOf(originalInner, originalOuter))
+        assertProbeExecutable(outer, outer)
+        assertProbeExecutable(inner, inner)
+    }
+
+    fun testClosedParentDoesNotBlockNestedRootUpgrade() {
+        val outer = createRoot("outer")
+        val inner = createRoot("outer/inner")
+        val originalInner = open(inner)
+        open(outer)
+        FileEditorManager.getInstance(project).closeFile(outer.source)
+        outer.write("broken", "1")
+        outer.write("probe-scripts.txt", "")
+        inner.write("probe-scripts.txt", "")
+        inner.write("version.txt", "2.5.15")
+
+        dependencyEvent(inner)
+        awaitVersion(inner, "2.5.15", originalInner)
+        assertEquals(listOf(inner.directory), servers().map { it.descriptor.roots.single() })
+        assertEquals("An idle parent must not be probed for its child's file", "",
+            Files.readString(outer.directory.toNioPath().resolve("probe-scripts.txt")))
+        assertProbeExecutable(inner, inner)
+    }
+
+    fun testMalformedOpenRootWithNonRootFallbackStillBlocksUnsafeRestart() {
+        val outer = createRoot("outer")
+        myFixture.tempDirFixture.createFile("outer/nested/biome.json", """{"root":false}""")
+        val nestedFile = myFixture.tempDirFixture.createFile("outer/nested/index.js", "const value=1;\n")
+        val outerWithNestedFile = Root(outer.directory, nestedFile)
+        val sibling = createRoot("sibling")
+        val originalOuter = open(outerWithNestedFile)
+        val originalSibling = open(sibling)
+        WriteAction.run<RuntimeException> { outer.directory.findChild("biome.json")!!.setBinaryContent("{".toByteArray()) }
+        outer.write("broken", "1")
+        sibling.write("version.txt", "2.5.15")
+
+        dependencyEvent(sibling)
+        settleUnchanged(listOf(originalOuter, originalSibling))
+    }
+
+    fun testNestedPackageWithinOneConfigRootKeepsFileSpecificSelection() {
+        val outer = createRoot("outer", "2.2.3")
+        val nested = createRoot("outer/nested", "2.5.15")
+        WriteAction.run<RuntimeException> { nested.directory.findChild("biome.json")!!.setBinaryContent("""{"root":false}""".toByteArray()) }
+        myFixture.configureFromExistingVirtualFile(nested.source)
+        waitUntilFileOpenedByLspServer(project, nested.source, timeout = 15)
+        val original = servers().single()
+        assertEquals(outer.directory, original.descriptor.roots.single())
+        assertEquals("2.5.15", original.initializeResult?.serverInfo?.version)
+        assertEquals(executable(nested), (original.descriptor as BiomeLspServerDescriptor).executable)
+        outer.write("probe-scripts.txt", "")
+        nested.write("version.txt", "2.6.0")
+
+        dependencyEvent(outer)
+        val replacement = awaitVersion(Root(outer.directory, nested.source), "2.6.0", original)
+        assertEquals(executable(nested), (replacement.descriptor as BiomeLspServerDescriptor).executable)
+        assertProbeExecutable(outer, nested)
+    }
+
+
+    fun testTwoPackagesInOneRootDoNotChangeStartupSelection() = checkSameRootStartupSelection(closeOrigin = false)
+
+    fun testClosedStartupFileRetainsSameRootPackageSelection() = checkSameRootStartupSelection(closeOrigin = true)
+
+    fun testDeletedStartupFileRetainsPackageDiscoveryContext() = checkSameRootStartupSelection(closeOrigin = true, deleteOrigin = true)
+
+    private fun checkSameRootStartupSelection(closeOrigin: Boolean, deleteOrigin: Boolean = false) {
+        val outer = createRoot("outer", "2.2.3")
+        var nested = createRoot("outer/nested", "2.5.15")
+        WriteAction.run<RuntimeException> { nested.directory.findChild("biome.json")!!.setBinaryContent("""{"root":false}""".toByteArray()) }
+        val original = open(outer)
+        myFixture.configureFromExistingVirtualFile(nested.source)
+        waitUntilFileOpenedByLspServer(project, nested.source, timeout = 15)
+        nested = firstOpenFile(nested)
+        if (closeOrigin) FileEditorManager.getInstance(project).closeFile(outer.source)
+        if (deleteOrigin) {
+            WriteAction.run<RuntimeException> { outer.source.delete(this) }
+            assertFalse(outer.source.isValid)
+        }
+        assertSame(original, servers().single())
+        assertEquals(outer.directory, original.descriptor.roots.single())
+        assertEquals(executable(outer), (original.descriptor as BiomeLspServerDescriptor).executable)
+        val packages = com.github.biomejs.intellijbiome.BiomePackage(project)
+        assertEquals(executable(nested), packages.binaryPath(outer.directory.path, nested.source, false))
+        assertEquals("Directory discovery must preserve the startup file's own node_modules selection",
+            executable(nested), packages.binaryPath(outer.directory.path, nested.source.parent, false))
+        assertEquals(executable(outer), packages.binaryPath(outer.directory.path, outer.directory, false))
+        outer.write("probe-scripts.txt", "")
+
+        dependencyEvent(outer)
+        awaitProbe(outer)
+        settleUnchanged(listOf(original))
+        assertProbeExecutable(outer, outer)
+        if (deleteOrigin) {
+            outer.write("probe-scripts.txt", "")
+            outer.write("version.txt", "2.6.0")
+            dependencyEvent(outer)
+            // The supported restart reconstructs this root from its remaining nested file.
+            val replacement = awaitVersion(Root(outer.directory, nested.source), "2.5.15", original)
+            assertEquals(executable(nested), (replacement.descriptor as BiomeLspServerDescriptor).executable)
+            assertEquals(setOf(executable(outer), executable(nested)),
+                Files.readAllLines(outer.directory.toNioPath().resolve("probe-scripts.txt")).toSet())
+        }
+    }
+
+
+    fun testBrokenProspectivePackagePreservesServerDuringOriginalUpgrade() {
+        val outer = createRoot("outer", "2.2.3")
+        var nested = createRoot("outer/nested", "2.5.15")
+        WriteAction.run<RuntimeException> { nested.directory.findChild("biome.json")!!.setBinaryContent("""{"root":false}""".toByteArray()) }
+        val original = open(outer)
+        myFixture.configureFromExistingVirtualFile(nested.source)
+        waitUntilFileOpenedByLspServer(project, nested.source, timeout = 15)
+        nested = firstOpenFile(nested)
+        assertSame(original, servers().single())
+        outer.write("probe-scripts.txt", "")
+        outer.write("version.txt", "2.6.0")
+        // This package would be selected first when the SDK rebuilds from open files.
+        // Fail this actual script, independently of the shared outer working directory.
+        Files.writeString(nested.directory.toNioPath().resolve("node_modules/@biomejs/biome/bin/biome"), """
+            require('node:fs').appendFileSync('probe-scripts.txt', __filename + '\n');
+            process.exit(42);
+        """.trimIndent())
+
+        dependencyEvent(outer)
+        awaitProbe(outer)
+        settleUnchanged(listOf(original))
+        assertTrue("The prospective executable must be checked before any restart",
+            Files.readAllLines(outer.directory.toNioPath().resolve("probe-scripts.txt")).contains(executable(nested)))
+    }
+
+    private fun firstOpenFile(root: Root): Root {
+        val editors = FileEditorManager.getInstance(project)
+        var selected = root
+        // The SDK test editor manager exposes HashMap order, not tab-opening order.
+        // Select real files until its public snapshot has the regression's nested-first order.
+        for (attempt in 1..32) {
+            if (editors.openFiles.firstOrNull() == selected.source) break
+            editors.closeFile(selected.source)
+            val source = WriteAction.compute<VirtualFile, RuntimeException> {
+                root.directory.createChildData(this, "ordered-$attempt.js").apply {
+                    setBinaryContent("const value=1;\n".toByteArray())
+                }
+            }
+            selected = Root(root.directory, source)
+            myFixture.configureFromExistingVirtualFile(selected.source)
+            waitUntilFileOpenedByLspServer(project, selected.source, timeout = 15)
+        }
+        assertEquals("The actual SDK snapshot must put the nested file first", selected.source, editors.openFiles.first())
+        return selected
+    }
+
+    private fun executable(root: Root) = root.directory.toNioPath().resolve("node_modules/@biomejs/biome/bin/biome").toString()
+
+    private fun awaitProbe(root: Root) {
+        PlatformTestUtil.waitWithEventsDispatching("Dependency probe did not run for ${root.directory.path}", {
+            Files.readString(root.directory.toNioPath().resolve("probe-scripts.txt")).isNotBlank()
+        }, 5)
+    }
+
+    private fun assertProbeExecutable(workingRoot: Root, packageRoot: Root) {
+        assertEquals("Every version probe must execute the selected root's package",
+            setOf(executable(packageRoot)), Files.readAllLines(workingRoot.directory.toNioPath().resolve("probe-scripts.txt")).toSet())
+    }
+
     private fun createRoot(name: String, version: String = "2.2.3"): Root {
         myFixture.tempDirFixture.createFile("$name/biome.json", "{}")
         myFixture.tempDirFixture.createFile("$name/package.json", """{"name":"$name","dependencies":{"@biomejs/biome":"2.2.3"}}""")
@@ -145,8 +324,10 @@ class BiomeDependencyRefreshLifecycleTest : BiomeLspFixtureTestCase() {
     companion object {
         private val peer = """
             const fs = require('node:fs');
-            const version = fs.readFileSync('version.txt', 'utf8').trim();
+            const fixtureRoot = require('node:path').resolve(__dirname, '../../../..');
+            const version = fs.readFileSync(require('node:path').join(fixtureRoot, 'version.txt'), 'utf8').trim();
             if (process.argv.includes('--version')) {
+              fs.appendFileSync('probe-scripts.txt', __filename + '\n');
               if (fs.existsSync('broken')) process.exit(42);
               const answer = 'Version: ' + version + '\n';
               if (fs.existsSync('hold')) {
