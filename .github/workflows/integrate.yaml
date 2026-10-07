@@ -41,6 +41,7 @@ jobs:
           --tests '*BiomeConfigRecoveryLspTest'
           --tests '*BiomeDependencyRefreshLifecycleTest'
           --tests '*BiomeDependencyUpgradeLspTest'
+          --tests '*BiomeDiagnosticsTest'
           --tests '*BiomeLanguageLspTest'
           --tests '*BiomeLanguageRoutingTest'
           --tests '*BiomeManualConfigCliTest'

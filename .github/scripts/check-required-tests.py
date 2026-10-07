@@ -93,6 +93,13 @@ REQUIRED_TESTS = {
         "testTemporarilyMissingInterpreterDoesNotLoseRefreshSubscription",
         "testUpgradeWhileAnotherRootInitializesIsRetriedWhenItRuns",
     },
+    PACKAGE + "lsp.BiomeDiagnosticsTest": {
+        "testAbsentCodeRendersMessageAndTooltip",
+        "testIntegerAndZeroCodesRenderMessageAndTooltip",
+        "testMultilineAndHtmlSensitiveTextIsEscapedOnlyInTooltip",
+        "testRuntimeMessageRepresentationsKeepTheirText",
+        "testStringCodeRendersMessageAndTooltip",
+    },
     PACKAGE + "lsp.BiomeLanguageLspTest": {
         "testArbitraryXmlPreservesNativeIdeFormatting",
         "testDefaultGritUsesGritIdentityAndFormats",
@@ -176,6 +183,7 @@ REQUIRED_TESTS = {
     },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+        "testDiagnosticQuickFixRenamesUnusedParameter",
     },
     PACKAGE + "lsp.V1BiomeLanguageLspTest": {
         "testJavascriptStillFormatsWithV1",
