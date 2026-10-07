@@ -50,9 +50,10 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions.
 `BiomeManualActionsTest` invokes both manual actions and checks notification outcomes, actual edits and undo,
-unchanged edits, missing/initializing servers, stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
+unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
+stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 175 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 180 named
 tests across 22 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
 

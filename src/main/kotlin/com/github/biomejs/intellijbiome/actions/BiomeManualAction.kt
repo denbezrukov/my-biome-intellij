@@ -73,6 +73,10 @@ abstract class BiomeManualAction protected constructor(
                 BiomeSaveOutcome.Completed -> when (result) {
                     Outcome.Changed -> Triple(BiomeBundle.message("$messagePrefix.success.label"),
                         BiomeBundle.message("$messagePrefix.success.description"), NotificationType.INFORMATION)
+                    Outcome.PartiallyChanged -> Triple(BiomeBundle.message("biome.manual.partial.title"),
+                        BiomeBundle.message("biome.manual.partial.description", file.name), NotificationType.WARNING)
+                    Outcome.NotApplied -> Triple(BiomeBundle.message("biome.manual.not.applied.title"),
+                        BiomeBundle.message("biome.manual.not.applied.description", file.name), NotificationType.WARNING)
                     Outcome.Unchanged -> Triple(BiomeBundle.message("biome.manual.unchanged.title"),
                         BiomeBundle.message("biome.manual.unchanged.description", file.name), NotificationType.INFORMATION)
                     Outcome.Unavailable -> Triple(BiomeBundle.message("biome.manual.unavailable.title"),
