@@ -3,6 +3,7 @@ package com.github.biomejs.intellijbiome.lsp
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.extensions.isBiomeConfigFile
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
+import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
