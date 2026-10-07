@@ -12,6 +12,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "BiomeConfigTest": {
+        "testClosingCancellationAfterExpectedReadFailureIsPreserved",
+        "testClosingFatalFailureAfterExpectedReadFailureIsPreserved",
+        "testCoroutineCancellationIdentityIsPreserved",
+        "testFatalFailureIdentityIsPreserved",
+        "testIoFailureClosingReturnsNullAndClosesStreamOnce",
+        "testIoFailureOpeningReturnsNull",
+        "testIoFailureReadingReturnsNullAndClosesStreamOnce",
+        "testMalformedInputReturnsNullAndClosesStreamOnce",
+        "testPlatformCancellationIdentityIsPreserved",
+        "testPlatformControlFlowIdentityIsPreserved",
+        "testRootAndExtendsSemanticsArePreserved",
+        "testUnexpectedRuntimeFailureIdentityIsPreserved",
+        "testValidJsonClosesStreamOnce",
+        "testValidJsoncClosesStreamOnce",
+    },
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": {
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",

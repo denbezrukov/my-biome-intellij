@@ -11,6 +11,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "BiomeConfigTest": (
+        "testClosingCancellationAfterExpectedReadFailureIsPreserved",
+        "testClosingFatalFailureAfterExpectedReadFailureIsPreserved",
+        "testCoroutineCancellationIdentityIsPreserved",
+        "testFatalFailureIdentityIsPreserved",
+        "testIoFailureClosingReturnsNullAndClosesStreamOnce",
+        "testIoFailureOpeningReturnsNull",
+        "testIoFailureReadingReturnsNullAndClosesStreamOnce",
+        "testMalformedInputReturnsNullAndClosesStreamOnce",
+        "testPlatformCancellationIdentityIsPreserved",
+        "testPlatformControlFlowIdentityIsPreserved",
+        "testRootAndExtendsSemanticsArePreserved",
+        "testUnexpectedRuntimeFailureIdentityIsPreserved",
+        "testValidJsonClosesStreamOnce",
+        "testValidJsoncClosesStreamOnce",
+    ),
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": (
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",
@@ -246,7 +262,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("162 required tests across 21 classes", result.stdout)
+            self.assertIn("176 required tests across 22 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

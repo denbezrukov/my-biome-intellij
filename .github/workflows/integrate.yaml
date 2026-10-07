@@ -38,6 +38,7 @@ jobs:
           --tests '*BiomeSaveOperationTest'
           --tests '*BiomeLauncherLspTest'
           --tests '*BiomeLauncherTest'
+          --tests '*BiomeConfigTest'
           --tests '*BiomeConfigRecoveryLspTest'
           --tests '*BiomeDependencyRefreshLifecycleTest'
           --tests '*BiomeDependencyUpgradeLspTest'
