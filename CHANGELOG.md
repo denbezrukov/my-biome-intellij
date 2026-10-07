@@ -24,6 +24,7 @@ This version prepares the fork's combined changes for GitHub artifact review. It
 - Render missing, string and numeric diagnostic codes safely; preserve escaped multiline tooltips and readable newer-SDK markup messages without the old 263 binary-incompatible getter call.
 - Distinguish changed, unchanged, unavailable and stale manual-action results; preserve cancellation and give own-timeout feedback. Hide editor-only actions in unsupported or disabled contexts.
 - Retain stored formatting/save preferences through Disabled mode, Settings Apply/reopen and the Actions on Save page, while keeping execution disabled.
+- Recover missing or repaired configuration in Manual mode with a blank override without reopening the editor; retain the selected executable and keep explicit overrides isolated.
 - Close config streams exactly once and propagate cancellation/control flow through config parsing, including stream-close failures.
 - Add explicit WebStorm compatibility lanes and a bounded descriptor range; gate fork ZIP distribution on required reports and Plugin Verifier results. Stable/nightly dry runs record the exact artifact's descriptor, version, SHA256 and intended upload path. Default workflow inputs publish nothing; an explicit publication input creates a GitHub draft from the same verified ZIP.
 
