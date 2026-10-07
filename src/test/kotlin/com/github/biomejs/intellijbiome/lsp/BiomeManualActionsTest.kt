@@ -125,6 +125,50 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
         }
     }
 
+    fun testBothActionsReportDeclinedWritePreparation() {
+        openFile()
+        replaceRequests { _, params -> response(params, "// edit requiring write access\n") }
+        val disposable = Disposer.newDisposable()
+        var preparations = 0
+        val outcomes = mutableListOf<Pair<NotificationType, String>>()
+        val file = myFixture.file.virtualFile
+        ApplicationManager.getApplication().replaceService(
+            com.intellij.codeInsight.FileModificationService::class.java,
+            object : com.intellij.codeInsight.FileModificationService() {
+                override fun preparePsiElementsForWrite(elements: Collection<com.intellij.psi.PsiElement>): Boolean =
+                    error("Unexpected PSI preparation")
+                override fun prepareFileForWrite(file: com.intellij.psi.PsiFile?): Boolean =
+                    error("Unexpected file preparation")
+                override fun prepareVirtualFilesForWrite(
+                    project: com.intellij.openapi.project.Project,
+                    files: Collection<com.intellij.openapi.vfs.VirtualFile>,
+                ): Boolean {
+                    assertEquals(listOf(file), files.toList())
+                    preparations++
+                    return false
+                }
+            },
+            disposable,
+        )
+        try {
+            for (action in actions) {
+                val before = myFixture.editor.document.text
+                invoke(action)
+                assertEquals(before, myFixture.editor.document.text)
+                assertEquals(1, notifications.size)
+                outcomes += notifications.single().let { it.type to it.title }
+            }
+            assertEquals(2, preparations)
+            assertEquals(
+                listOf(NotificationType.WARNING to "Biome actions unavailable", NotificationType.WARNING to "Biome actions unavailable"),
+                outcomes,
+            )
+        } finally {
+            Disposer.dispose(disposable)
+        }
+    }
+
+
     fun testBothActionsReportIdenticalTextEditAsUnchanged() {
         openFile()
         replaceRequests { _, params -> response(params, "") }
@@ -155,6 +199,62 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
             invoke(action)
             assertEquals(before, myFixture.editor.document.text)
             assertNotification(NotificationType.WARNING, "Biome actions unavailable", "could not be applied")
+        }
+    }
+
+    fun testBothActionsReportCommandOnlyCodeActionsAsUnavailable() {
+        openFile()
+        replaceRequests { _, _ -> listOf(Either.forRight(CodeAction("controlled command action").apply {
+            command = Command("controlled command", "fixture.command", emptyList())
+        })) }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome actions unavailable", "No changes were applied")
+        }
+    }
+
+    fun testBothActionsDoNotPartiallyInvokeCommandBearingCodeActions() {
+        openFile()
+        replaceRequests { _, params -> response(params, "// edit before untracked command\n").onEach {
+            it.right.command = Command("controlled command", "fixture.command", emptyList())
+        } }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome actions unavailable", "No changes were applied")
+        }
+    }
+
+    fun testBothActionsReportServerLossDuringRequest() {
+        replaceRequests { server, _ ->
+            withContext(Dispatchers.EDT) { BiomeServerService.getInstance(project).stopBiomeServer() }
+            assertTrue("The request has lost its server", server.state != LspServerState.Running)
+            null
+        }
+        for (action in actions) {
+            FileEditorManager.getInstance(project).let { manager -> manager.openFiles.forEach(manager::closeFile) }
+            openFile()
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome unavailable", "language server is not ready")
+        }
+    }
+
+    fun testBothActionsTreatNullFromRunningServerAsUnchanged() {
+        openFile()
+        replaceRequests { server, _ ->
+            assertEquals(LspServerState.Running, server.state)
+            null
+        }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.INFORMATION, "No changes needed", "first.js")
         }
     }
 

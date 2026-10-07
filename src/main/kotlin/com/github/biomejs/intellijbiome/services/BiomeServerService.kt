@@ -100,12 +100,13 @@ class BiomeServerService internal constructor(
                 )
             }
             val actions = requests.codeActions(server, params)
+            if (actions == null && server.state != LspServerState.Running) {
+                return if (changed) Outcome.PartiallyChanged else Outcome.Unavailable
+            }
             if (!applyIfCurrent(document, file, stamp, commandName) {
                     val before = document.text
                     actions?.forEach { result ->
-                        val action = if (result.isRight) LspIntentionAction(server, result.right) else null
-                        if (action != null && action.isAvailable()) action.invoke(file)
-                        else skipped = true
+                        if (!result.isRight || !applyCodeAction(server, file, result.right)) skipped = true
                     }
                     changed = changed || document.text != before
                 }) return Outcome.Stale
@@ -119,6 +120,9 @@ class BiomeServerService internal constructor(
                 )
             }
             val edits = requests.formatting(server, params)
+            if (edits == null && server.state != LspServerState.Running) {
+                return if (changed) Outcome.PartiallyChanged else Outcome.Unavailable
+            }
             if (!edits.isNullOrEmpty()) {
                 if (!applyIfCurrent(document, file, stamp, commandName) {
                         val before = document.text
@@ -134,6 +138,23 @@ class BiomeServerService internal constructor(
             changed -> Outcome.Changed
             else -> Outcome.Unchanged
         }
+    }
+
+    private fun applyCodeAction(server: LspServer, file: VirtualFile, codeAction: CodeAction): Boolean {
+        // Commands and deferred actions have no tracked synchronous completion here.
+        val edit = codeAction.edit ?: return false
+        if (codeAction.command != null) return false
+        var applied = edit.changes.isNullOrEmpty() && edit.documentChanges.isNullOrEmpty()
+        val action = object : LspIntentionAction(server, codeAction) {
+            override fun applyWorkspaceEdit(workspaceEdit: WorkspaceEdit, uriToDocumentMap: Map<String, Document>) {
+                super.applyWorkspaceEdit(workspaceEdit, uriToDocumentMap)
+                applied = true
+            }
+        }
+        if (!action.isAvailable()) return false
+        action.invoke(file)
+        // Availability does not include the platform's write-access preparation.
+        return applied
     }
 
     private suspend fun applyIfCurrent(
