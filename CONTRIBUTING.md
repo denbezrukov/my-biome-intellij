@@ -50,7 +50,7 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 187 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 189 named
 tests across 22 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. The launcher inventory includes
 `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
@@ -79,6 +79,8 @@ The manual executable recovery gate includes these named `BiomeManualConfigRecov
 - `testMissingConfigCreationRecoversSameEditorWithSelectedExecutable`
 - `testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable`
 - `testWhitespaceOverrideUsesSameEditorDiscovery`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigCreation`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigRepair`
 - `testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation`
 - `testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery`
 - `testDisabledModePreventsPendingManualRecovery`
@@ -89,7 +91,8 @@ The manual executable recovery gate includes these named `BiomeManualConfigRecov
 - `testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry`
 
 They retain the open editor, selected executable and real server version, and verify formatting with a different
-project dependency installed. Nonblank overrides retain exact configuration selection; the existing nested Manual
+project dependency installed. XML-loaded whitespace overrides from older settings retain the same discovery behavior.
+Nonblank overrides retain exact configuration selection; the existing nested Manual
 negative control uses an explicit override. Mode changes, project disposal and unrelated config/project isolation
 remain covered. Controlled-dispatcher races also require changes to Manual config/executable selections to discard
 stale discovery requests before an EDT restart, then adopt the current executable on a fresh read.
