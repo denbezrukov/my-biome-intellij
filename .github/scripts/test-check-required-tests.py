@@ -25,6 +25,19 @@ REQUIRED_TESTS = {
         "testVersion1LaunchPreservesSelectedJsonc",
         "testVersion1LegacyDirectoryLaunch",
     ),
+    PACKAGE + "lsp.BiomeNestedRootsLspTest": (
+        "testChildFirstPublicRestartRestoresBothWorkspaces",
+        "testChildThenParentIdeFormattingUsesChildServer",
+        "testChildThenParentServiceFormattingUsesChildServer",
+        "testExplicitManualConfigRetainsProjectWideOwnership",
+        "testMalformedEstablishedChildKeepsExclusiveOwnership",
+        "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
+        "testMissingExistingRootRetainsNonRootChildOwnership",
+        "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testParentFirstPublicRestartRestoresBothWorkspaces",
+        "testParentThenChildIdeFormattingUsesChildServer",
+        "testParentThenChildServiceFormattingUsesChildServer",
+    ),
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": (
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
     ),
@@ -94,7 +107,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("38 required tests across 7 classes", result.stdout)
+            self.assertIn("49 required tests across 8 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

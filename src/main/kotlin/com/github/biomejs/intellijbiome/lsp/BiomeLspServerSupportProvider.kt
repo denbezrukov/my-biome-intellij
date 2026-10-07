@@ -9,11 +9,14 @@ import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.Computable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerDescriptor
@@ -45,22 +48,43 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val biome = BiomePackage(project)
         val configPath = biome.configPath()
 
-        // Finds the root directory of a Biome workspace. It's typically the parent directory of `biome.json`.
-        // If no `biome.json` file found, nothing to do.
-        val projectRootDir = project
-            .getBaseDirectories()
-            .find { VfsUtil.isUnder(file, setOf(it)) } ?: return
-
-        val root = if (configPath.isNullOrEmpty()) {
-            file.findNearestBiomeConfig(projectRootDir)?.parent ?: return
-        } else {
-            // When using manual configuration, the root directory will be the project root.
-            projectRootDir
+        val projectRoots = project.getBaseDirectories()
+        fun findRoot(candidate: VirtualFile): VirtualFile? {
+            if (!settings.fileSupported(candidate)) return null
+            val projectRoot = projectRoots.find { VfsUtil.isUnder(candidate, setOf(it)) } ?: return null
+            return if (configPath.isNullOrEmpty()) {
+                candidate.findNearestBiomeConfig(projectRoot)?.parent
+            } else {
+                // Explicit manual configuration owns the entire project root.
+                projectRoot
+            }
         }
 
+        val root = findRoot(file) ?: return
         // Select the executable here; the platform probes it during pooled server startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
         serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath))
+        if (!configPath.isNullOrEmpty()) return
+
+        // Native restart skips later open files below the first collected root without
+        // consulting isSupportedFile. Its callback starter holds only one descriptor.
+        // Submit independent open descendants through the public, project-scoped manager;
+        // it deduplicates root IDs before starting or probing a process.
+        val manager = LspServerManager.getInstance(project)
+        val scheduledRoots = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            .flatMapTo(mutableSetOf(root)) { it.descriptor.roots.toList() }
+        val fileIndex = ProjectFileIndex.getInstance(project)
+        for (openFile in FileEditorManager.getInstance(project).openFiles) {
+            ProgressManager.checkCanceled()
+            if (!openFile.isInLocalFileSystem || !fileIndex.isInContent(openFile) ||
+                !VfsUtilCore.isAncestor(root, openFile, true)) continue
+            val nestedRoot = findRoot(openFile) ?: continue
+            if (nestedRoot in scheduledRoots || !VfsUtilCore.isAncestor(root, nestedRoot, true)) continue
+            val nestedExecutable = biome.binaryPath(nestedRoot.path, openFile, false) ?: continue
+            scheduledRoots.add(nestedRoot)
+            manager.ensureServerStarted(BiomeLspServerSupportProvider::class.java,
+                BiomeLspServerDescriptor(project, nestedRoot, nestedExecutable, configPath))
+        }
     }
 
     override fun createLspServerWidgetItem(lspServer: LspServer,
@@ -139,7 +163,23 @@ private class BiomeLspServerDescriptor(
 
     override fun isSupportedFile(file: VirtualFile): Boolean {
         return BiomeSettings.getInstance(project).fileSupported(file)
-            && roots.any { root -> file.toNioPath().startsWith(root.toNioPath()) }
+            && roots.any { root ->
+                if (!file.toNioPath().startsWith(root.toNioPath())) return@any false
+                if (!configPath.isNullOrEmpty()) return@any true
+                // Established nested workspaces retain ownership while their config is edited.
+                val nestedOwner = LspServerManager.getInstance(project)
+                    .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                    .any { server -> server.descriptor.roots.any { otherRoot ->
+                        otherRoot != root && otherRoot.toNioPath().startsWith(root.toNioPath()) &&
+                            file.toNioPath().startsWith(otherRoot.toNioPath())
+                    } }
+                if (nestedOwner) return@any false
+                val config = file.findNearestBiomeConfig(root)
+                // The IDE caches rejected paths for this server's lifetime. Keep an established
+                // root's files during temporary config errors; only a distinct independent root
+                // takes ownership. A non-root fallback still belongs to this running workspace.
+                config == null || config.parent == root || BiomeConfig.loadFromFile(config)?.isRootConfig() != true
+            }
     }
 
     override fun createCommandLine(): GeneralCommandLine {
