@@ -34,7 +34,7 @@ filter_unconventional = true
 filter_commits = true
 
 commit_preprocessors = [
-  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/denbezrukov/my-biome-intellij/pull/${1}))" }
+  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/biomejs/biome-intellij/pull/${1}))" }
 ]
 
 # Commit parsers to use for parsing commits

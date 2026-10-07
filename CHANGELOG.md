@@ -2,38 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## 1.11.0 — fork release candidate
-
-This version prepares the fork's combined changes for GitHub artifact review. It does not announce an upstream Marketplace release.
-
-### Features and fixes
-
-- Preserve the exact manually selected JSON/JSONC configuration file, including sibling configurations ([#8](https://github.com/denbezrukov/my-biome-intellij/pull/8)).
-- Enable Grit by default while preserving native SVG/XML formatting; keep older Biome language support bounded by the installed version ([#9](https://github.com/denbezrukov/my-biome-intellij/pull/9)).
-- Run cancellable save actions with a five-second budget per document; preserve newer edits, completed valid changes, actual disk output and undo/redo across LF/CRLF ([#10](https://github.com/denbezrukov/my-biome-intellij/pull/10)).
-- Bound startup/version probes, preserve cancellation and process cleanup, and retain complete prerelease/build version identity ([#11](https://github.com/denbezrukov/my-biome-intellij/pull/11)).
-- Honor the selected local Node.js interpreter for manual npm launchers while retaining native/foreign-target dispatch ([#12](https://github.com/denbezrukov/my-biome-intellij/pull/12)).
-- Recover the existing editor after relevant configuration creation or repair ([#13](https://github.com/denbezrukov/my-biome-intellij/pull/13)).
-- Keep nested configuration roots independent, including when rebuilding servers during restart ([#14](https://github.com/denbezrukov/my-biome-intellij/pull/14)).
-- Preserve a Biome daemon shared with another open project during restart ([#15](https://github.com/denbezrukov/my-biome-intellij/pull/15)).
-- Refresh Automatic-mode servers after a verified installed dependency upgrade, with each root retaining its own package/config selection ([#16](https://github.com/denbezrukov/my-biome-intellij/pull/16)).
-
-### Audit follow-ups
-
-- Filter queued nested-root recovery against current project/editor ownership, and retain package discovery context when the startup file disappears.
-- Render missing, string and numeric diagnostic codes safely; preserve escaped multiline tooltips and readable newer-SDK markup messages without the old 263 binary-incompatible getter call.
-- Distinguish changed, unchanged, unavailable and stale manual-action results; preserve cancellation and give own-timeout feedback. Hide editor-only actions in unsupported or disabled contexts.
-- Retain stored formatting/save preferences through Disabled mode, Settings Apply/reopen and the Actions on Save page, while keeping execution disabled.
-- Recover missing or repaired configuration in Manual mode with a blank override without reopening the editor; retain the selected executable and keep explicit overrides isolated.
-- Close config streams exactly once and propagate cancellation/control flow through config parsing, including stream-close failures.
-- Add explicit WebStorm compatibility lanes and a bounded descriptor range; gate fork ZIP distribution on required reports and Plugin Verifier results. Stable/nightly dry runs record the exact artifact's descriptor, version, SHA256 and intended upload path. Default workflow inputs publish nothing; an explicit publication input creates a GitHub draft from the same verified ZIP.
-
-### Scope and distribution
-
-- Admitted IDE build range is 253 (2025.3) through 262.* (2026.2), with complete required gates on both exact WebStorm targets. EAP263 remains outside the admitted range pending runtime validation. JDK 21 and Kotlin 2.2.20 remain pinned for development.
-- Fork installation uses a verified GitHub ZIP. Upstream plugin ID/vendor attribution is preserved; the upstream Marketplace listing is separate.
-- Linux is the actual runtime validation platform. Windows/WSL runtime and remote configuration mapping remain held. Default SVG routing, watcher controls, dynamic nested-root topology changes, and additional IDE product coverage remain outside this release's scope.
-
 ## 1.10.1
 
 ### Bug Fixes
