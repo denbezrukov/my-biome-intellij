@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Require every focused plugin regression to run and pass in Gradle JUnit XML.
+
+Run after ``cleanTest test --no-build-cache`` so reports come from the current run.
+"""
+
+import argparse
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+
+PACKAGE = "com.github.biomejs.intellijbiome."
+REQUIRED_TESTS = {
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
+        "testSelectedFilesRoundTrip",
+        "testLegacyDirectoryRoundTrip",
+        "testConfigPathValidation",
+        "testBlankOverrideRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testInvalidManualInputCannotApply",
+        "testHiddenManualInputDoesNotBlockModeChange",
+    },
+    PACKAGE + "lsp.BiomeManualConfigLspTest": {
+        "testSelectedJsoncUsesSingleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testLegacyDirectoryUsesDoubleQuotes",
+    },
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+    },
+    PACKAGE + "lsp.BiomeManualConfigCliTest": {
+        "testVersion1SelectionContract",
+        "testVersion2SelectionContract",
+    },
+    PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
+        "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    },
+}
+
+
+def check_reports(report_directory):
+    reports = sorted(report_directory.glob("TEST-*.xml"))
+    if not reports:
+        return [f"No JUnit reports found in {report_directory}"]
+
+    problems = []
+    seen_classes = set()
+    for report in reports:
+        try:
+            suite = ET.parse(report).getroot()
+        except (ET.ParseError, OSError) as error:
+            problems.append(f"Cannot parse {report}: {error}")
+            continue
+        if suite.tag != "testsuite":
+            problems.append(f"Expected testsuite root in {report}")
+            continue
+
+        class_name = suite.get("name")
+        if class_name not in REQUIRED_TESTS:
+            continue
+        if class_name in seen_classes:
+            problems.append(f"Duplicate report for {class_name}: {report}")
+        seen_classes.add(class_name)
+
+        counts = {}
+        for attribute in ("tests", "failures", "errors", "skipped"):
+            value = suite.get(attribute)
+            try:
+                count = int(value)
+                if count < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                problems.append(f"Invalid {attribute} count {value!r} in {report}")
+                continue
+            counts[attribute] = count
+            if attribute != "tests" and count:
+                problems.append(f"{class_name} reports {attribute}={count}")
+
+        cases = suite.findall("testcase")
+        if counts.get("tests") != len(cases):
+            problems.append(f"Test count does not match {len(cases)} testcases in {report}")
+        executed = 0
+        seen_methods = set()
+        for case in cases:
+            method = case.get("name")
+            if case.get("classname") != class_name:
+                problems.append(f"Unexpected testcase class for {class_name}.{method}")
+                continue
+            if method in seen_methods:
+                problems.append(f"Duplicate method {class_name}.{method}")
+            seen_methods.add(method)
+            for outcome in ("failure", "error", "skipped"):
+                if case.find(outcome) is not None:
+                    problems.append(f"{class_name}.{method} contains {outcome}")
+            if case.find("skipped") is None:
+                executed += 1
+
+        if not executed:
+            problems.append(f"No executed tests in {class_name}")
+        for method in sorted(REQUIRED_TESTS[class_name] - seen_methods):
+            problems.append(f"Missing required method {class_name}.{method}")
+
+    for class_name in sorted(REQUIRED_TESTS.keys() - seen_classes):
+        problems.append(f"Missing required class {class_name}")
+    return problems
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("report_directory", type=Path)
+    args = parser.parse_args()
+    problems = check_reports(args.report_directory)
+    if problems:
+        print("Required plugin regression checks failed:", file=sys.stderr)
+        for problem in problems:
+            print(f"- {problem}", file=sys.stderr)
+        return 1
+    required_count = sum(len(methods) for methods in REQUIRED_TESTS.values())
+    print(f"Verified {required_count} required tests across {len(REQUIRED_TESTS)} classes.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
