@@ -184,6 +184,21 @@ REQUIRED_TESTS = {
         "testRepairAfterMalformedChildRestartRestoresIndependentWorkspace",
         "testRepairWithoutRestartControlRestoresIndependentWorkspace",
     ),
+    PACKAGE + "lsp.BiomeManualActionsTest": (
+        "testBothActionsApplyEditsAndUndo",
+        "testBothActionsApplyRealServerEditsAndUndo",
+        "testBothActionsHideIneligibleContextsAndUseBgtUpdates",
+        "testBothActionsPreserveRequestTimeoutCancellation",
+        "testBothActionsPreserveParentCancellation",
+        "testBothActionsPreservePlatformCancellation",
+        "testBothActionsReportIdenticalTextEditAsUnchanged",
+        "testBothActionsReportInitializingServerWithoutRequesting",
+        "testBothActionsReportMissingServer",
+        "testBothActionsReportNoChanges",
+        "testBothActionsReportOwnTimeout",
+        "testBothActionsReportServerFailure",
+        "testBothActionsReportStaleResponseAfterTyping",
+    ),
     PACKAGE + "lsp.BiomeSaveActionsTest": (
         "testCancellationBeforeWriteDoesNotMutate",
         "testCancellationWhileWriteIsQueuedDoesNotMutate",
@@ -299,7 +314,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("207 required tests across 25 classes", result.stdout)
+            self.assertIn("220 required tests across 26 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

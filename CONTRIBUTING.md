@@ -44,14 +44,16 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest' --tests '*BiomeDisabledPreferencesTest' --tests '*BiomeDiagnosticsTest' --tests '*BiomeManualConfigRecoveryLspTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLauncherLspTest' --tests '*BiomeLauncherTest' --tests '*BiomeConfigTest' --tests '*BiomeConfigRecoveryLspTest' --tests '*BiomeDependencyRefreshLifecycleTest' --tests '*BiomeDependencyUpgradeLspTest' --tests '*BiomeLanguageLspTest' --tests '*BiomeLanguageRoutingTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeNestedRootsLspTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSharedDaemonLspTest' --tests '*OlderBiomeLanguageLspTest' --tests '*UnusedFunctionHighlightingTest' --tests '*V1BiomeLanguageLspTest' --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeStartupLspTest' --tests '*BiomeStartupProbeTest' --tests '*BiomeDisabledPreferencesTest' --tests '*BiomeDiagnosticsTest' --tests '*BiomeManualConfigRecoveryLspTest' --tests '*BiomeManualActionsTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
-These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
+These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions.
+`BiomeManualActionsTest` invokes both manual actions and checks notification outcomes, actual edits and undo,
+unchanged edits, missing/initializing servers, stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 207 named
-tests across 25 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 220 named
+tests across 26 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
 
 The required `BiomeConfigTest` inventory exercises the real loader:
