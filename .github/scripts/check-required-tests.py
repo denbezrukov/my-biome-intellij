@@ -59,6 +59,8 @@ REQUIRED_TESTS = {
         "testManualLauncherKeepsSelectedTarget",
         "testNativeDoesNotRequireConfiguredNodeInterpreter",
         "testNativeWithJavaScriptSuffixStillRunsDirectly",
+        "testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes",
+        "testNodeReaderFinishesAfterProxyExitWithInheritedPipes",
         "testNodeScriptPreservesWorkingDirectoryArgumentsAndEnvironment",
         "testNpmLauncherPreservesBiomeBinaryOverride",
         "testShellWrapperKeepsItsEnvironmentSetup",
