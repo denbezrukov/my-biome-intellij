@@ -256,8 +256,8 @@ class OlderBiomeLanguageLspTest : BiomeLanguageLspTestBase("2.2.3") {
     }
 
     fun testExplicitSvgReturnsNoEditsOnOlderBiome() {
-        startAndInitializeServerBeforeLanguageDocument()
         myFixture.addFileToProject("biome.json", "{\"html\":{\"formatter\":{\"enabled\":true}}}")
+        startAndInitializeServerBeforeLanguageDocument()
         BiomeSettings.getInstance(project).supportedExtensions = mutableListOf(".svg")
         formatThroughPlugin("icon.svg", SVG_INPUT, "svg", SVG_INPUT)
         assertFormattingRegistrationHasNoDocumentSelector()
