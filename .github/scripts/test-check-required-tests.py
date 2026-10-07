@@ -11,32 +11,60 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
-    PACKAGE + "settings.BiomeManualConfigSettingsTest": (
-        "testSelectedFilesRoundTrip",
-        "testLegacyDirectoryRoundTrip",
-        "testConfigPathValidation",
-        "testBlankOverrideRoundTrip",
-        "testPathWithSpaces",
-        "testSelectedConfigSurvivesApplyAndReopen",
-        "testInvalidManualInputCannotApply",
-        "testHiddenManualInputDoesNotBlockModeChange",
+    PACKAGE + "lsp.BiomeLanguageLspTest": (
+        "testArbitraryXmlPreservesNativeIdeFormatting",
+        "testDefaultGritUsesGritIdentityAndFormats",
+        "testDefaultSvgPreservesNativeIdeFormatting",
+        "testDisabledPluginSavesGritWithoutStartingOrFormatting",
+        "testExplicitSvgReturnsNoEditsWithHtmlDisabled",
+        "testExplicitSvgUsesSdkIdentityAndReturnsNoEditsWithHtmlEnabled",
+        "testGritFormatsAndPersistsThroughActualSave",
     ),
-    PACKAGE + "lsp.BiomeManualConfigLspTest": (
-        "testSelectedJsoncUsesSingleQuotes",
-        "testSelectedJsonUsesDoubleQuotes",
-        "testLegacyDirectoryUsesDoubleQuotes",
-    ),
-    PACKAGE + "lsp.BiomeManualConfigV1LspTest": (
-        "testVersion1LaunchPreservesSelectedJsonc",
-        "testVersion1LegacyDirectoryLaunch",
-        "testVersion1EmptyOverrideOmitsConfigArgument",
+    PACKAGE + "lsp.BiomeLanguageRoutingTest": (
+        "testArbitraryXmlIsNotSupportedByDefault",
+        "testBaselineSdkUsesGritSuffixForLspIdentity",
+        "testBaselineSdkUsesSvgSuffixForLspIdentity",
+        "testDisabledPluginDisablesFormatting",
+        "testExplicitSvgExtensionRemainsSupported",
+        "testGritIsSupportedByDefault",
+        "testPersistedCustomExtensionsAreNotReplacedByNewDefaults",
+        "testResetToDefaultsLinkAppliesGritWithoutClaimingSvg",
+        "testSvgIsNotClaimedUntilOlderServerFallbackIsVerified",
     ),
     PACKAGE + "lsp.BiomeManualConfigCliTest": (
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
     ),
+    PACKAGE + "lsp.BiomeManualConfigLspTest": (
+        "testLegacyDirectoryUsesDoubleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testSelectedJsoncUsesSingleQuotes",
+    ),
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": (
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+    ),
+    PACKAGE + "lsp.OlderBiomeLanguageLspTest": (
+        "testDefaultGritFormatsAfterServerInitialization",
+        "testExplicitSvgReturnsNoEditsOnOlderBiome",
+    ),
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": (
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    ),
+    PACKAGE + "lsp.V1BiomeLanguageLspTest": (
+        "testJavascriptStillFormatsWithV1",
+        "testUnsupportedGritRemainsUnchangedWithV1",
+    ),
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": (
+        "testBlankOverrideRoundTrip",
+        "testConfigPathValidation",
+        "testHiddenManualInputDoesNotBlockModeChange",
+        "testInvalidManualInputCannotApply",
+        "testLegacyDirectoryRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testSelectedFilesRoundTrip",
     ),
 }
 GUARD = Path(__file__).with_name("check-required-tests.py")
@@ -69,7 +97,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("17 required tests across 5 classes", result.stdout)
+            self.assertIn("37 required tests across 9 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

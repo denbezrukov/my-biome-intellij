@@ -12,32 +12,60 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
-    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
-        "testSelectedFilesRoundTrip",
-        "testLegacyDirectoryRoundTrip",
-        "testConfigPathValidation",
-        "testBlankOverrideRoundTrip",
-        "testPathWithSpaces",
-        "testSelectedConfigSurvivesApplyAndReopen",
-        "testInvalidManualInputCannotApply",
-        "testHiddenManualInputDoesNotBlockModeChange",
+    PACKAGE + "lsp.BiomeLanguageLspTest": {
+        "testArbitraryXmlPreservesNativeIdeFormatting",
+        "testDefaultGritUsesGritIdentityAndFormats",
+        "testDefaultSvgPreservesNativeIdeFormatting",
+        "testDisabledPluginSavesGritWithoutStartingOrFormatting",
+        "testExplicitSvgReturnsNoEditsWithHtmlDisabled",
+        "testExplicitSvgUsesSdkIdentityAndReturnsNoEditsWithHtmlEnabled",
+        "testGritFormatsAndPersistsThroughActualSave",
     },
-    PACKAGE + "lsp.BiomeManualConfigLspTest": {
-        "testSelectedJsoncUsesSingleQuotes",
-        "testSelectedJsonUsesDoubleQuotes",
-        "testLegacyDirectoryUsesDoubleQuotes",
-    },
-    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
-        "testVersion1LaunchPreservesSelectedJsonc",
-        "testVersion1LegacyDirectoryLaunch",
-        "testVersion1EmptyOverrideOmitsConfigArgument",
+    PACKAGE + "lsp.BiomeLanguageRoutingTest": {
+        "testArbitraryXmlIsNotSupportedByDefault",
+        "testBaselineSdkUsesGritSuffixForLspIdentity",
+        "testBaselineSdkUsesSvgSuffixForLspIdentity",
+        "testDisabledPluginDisablesFormatting",
+        "testExplicitSvgExtensionRemainsSupported",
+        "testGritIsSupportedByDefault",
+        "testPersistedCustomExtensionsAreNotReplacedByNewDefaults",
+        "testResetToDefaultsLinkAppliesGritWithoutClaimingSvg",
+        "testSvgIsNotClaimedUntilOlderServerFallbackIsVerified",
     },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
     },
+    PACKAGE + "lsp.BiomeManualConfigLspTest": {
+        "testLegacyDirectoryUsesDoubleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testSelectedJsoncUsesSingleQuotes",
+    },
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+    },
+    PACKAGE + "lsp.OlderBiomeLanguageLspTest": {
+        "testDefaultGritFormatsAfterServerInitialization",
+        "testExplicitSvgReturnsNoEditsOnOlderBiome",
+    },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    },
+    PACKAGE + "lsp.V1BiomeLanguageLspTest": {
+        "testJavascriptStillFormatsWithV1",
+        "testUnsupportedGritRemainsUnchangedWithV1",
+    },
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
+        "testBlankOverrideRoundTrip",
+        "testConfigPathValidation",
+        "testHiddenManualInputDoesNotBlockModeChange",
+        "testInvalidManualInputCannotApply",
+        "testLegacyDirectoryRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testSelectedFilesRoundTrip",
     },
 }
 
