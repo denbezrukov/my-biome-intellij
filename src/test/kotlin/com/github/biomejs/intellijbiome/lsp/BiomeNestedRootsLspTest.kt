@@ -133,7 +133,10 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         // Register primary-project editor listeners and package.json pointers before
         // the secondary fixture takes its global leak-tracking snapshot.
         com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
-        myFixture.doHighlighting()
+        for (file in listOf(childFile, parentFile)) {
+            myFixture.configureFromExistingVirtualFile(file)
+            myFixture.doHighlighting()
+        }
         val factory = com.intellij.testFramework.fixtures.IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-other-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)

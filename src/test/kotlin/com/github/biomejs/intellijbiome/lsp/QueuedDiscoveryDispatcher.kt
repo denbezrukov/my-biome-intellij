@@ -45,4 +45,3 @@ internal class QueuedDiscoveryDispatcher : CoroutineDispatcher() {
         (job as? CoroutineScope)?.coroutineContext?.get(kotlin.coroutines.ContinuationInterceptor) == Dispatchers.EDT ||
             job.children.any(::waitingOnEdt)
 }
-
