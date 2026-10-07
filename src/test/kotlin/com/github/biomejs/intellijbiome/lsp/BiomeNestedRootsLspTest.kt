@@ -19,7 +19,7 @@ import kotlinx.coroutines.*
 import java.util.concurrent.CopyOnWriteArrayList
 import java.nio.file.Files
 
-@TestNpmPackage("@biomejs/biome@2.2.3")
+@TestNpmPackage("@biomejs/biome@2.5.14")
 class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
     private lateinit var parentFile: VirtualFile
     private lateinit var childFile: VirtualFile
@@ -52,6 +52,64 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
     fun testChildThenParentServiceFormattingUsesChildServer() { exercise(parentFirst = false) }
     fun testParentThenChildIdeFormattingUsesChildServer() { exercise(parentFirst = true, throughIde = true) }
     fun testChildThenParentIdeFormattingUsesChildServer() { exercise(parentFirst = false, throughIde = true) }
+
+    fun testMalformedExistingRootDoesNotPermanentlyRejectNewFile() {
+        verifyEstablishedRootOwnership(removeConfig = false, nonRootChild = false)
+    }
+
+    fun testMissingExistingRootRetainsNonRootChildOwnership() {
+        verifyEstablishedRootOwnership(removeConfig = true, nonRootChild = true)
+    }
+
+    private fun verifyEstablishedRootOwnership(removeConfig: Boolean, nonRootChild: Boolean) {
+        myFixture.configureFromExistingVirtualFile(parentFile)
+        waitUntilFileOpenedByLspServer(project, parentFile, timeout = 20)
+        awaitFirstServerReadiness(parentFile)
+        val original = LspServerManager.getInstance(project).getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
+        val rootConfig = parentFile.parent.toNioPath().resolve("biome.json")
+        val validConfig = Files.readString(rootConfig)
+        if (removeConfig) Files.delete(rootConfig) else Files.writeString(rootConfig, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, parentFile.parent)
+        val latePath = if (nonRootChild) {
+            myFixture.tempDirFixture.createFile("non-root/biome.json", """{"root":false,"extends":"//"}""")
+            "non-root/late.js"
+        } else "late.js"
+        val lateFile = myFixture.tempDirFixture.createFile(latePath, "const message='late';\n")
+        myFixture.configureFromExistingVirtualFile(lateFile)
+        waitUntilFileOpenedByLspServer(project, lateFile, timeout = 15)
+        Files.writeString(rootConfig, validConfig)
+        VfsUtil.markDirtyAndRefresh(false, true, true, parentFile.parent)
+        FileEditorManager.getInstance(project).closeFile(lateFile)
+        myFixture.configureFromExistingVirtualFile(lateFile)
+        waitUntilFileOpenedByLspServer(project, lateFile, timeout = 15)
+        events.awaitDiagnostics(lateFile)
+        formatAndAssert(lateFile, "const message = \"late\";\n")
+        assertSame(original, LspServerManager.getInstance(project).getServersForProvider(BiomeLspServerSupportProvider::class.java).single())
+    }
+
+    fun testMalformedEstablishedChildKeepsExclusiveOwnership() {
+        exercise(parentFirst = true)
+        val config = childFile.parent.toNioPath().resolve("biome.json")
+        val validConfig = Files.readString(config)
+        Files.writeString(config, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        val lateFile = myFixture.tempDirFixture.createFile("nested/late.js", "const message=\"late\";\n")
+        myFixture.configureFromExistingVirtualFile(lateFile)
+        waitUntilFileOpenedByLspServer(project, lateFile, timeout = 15)
+        val owners = LspServerManager.getInstance(project)
+            .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            .filter { it.descriptor.isSupportedFile(lateFile) }
+        assertEquals(setOf(childFile.parent), owners.flatMap { it.descriptor.roots.toList() }.toSet())
+        assertEquals("Temporary child config errors must not transfer ownership to its parent",
+            setOf(childFile.parent), opened.filter { it.second == lateFile }.flatMap { it.first.descriptor.roots.toList() }.toSet())
+        Files.writeString(config, validConfig)
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        FileEditorManager.getInstance(project).closeFile(lateFile)
+        myFixture.configureFromExistingVirtualFile(lateFile)
+        waitUntilFileOpenedByLspServer(project, lateFile, timeout = 15)
+        events.awaitDiagnostics(lateFile)
+        formatAndAssert(lateFile, "const message = 'late';\n")
+    }
 
     fun testExplicitManualConfigRetainsProjectWideOwnership() {
         BiomeSettings.getInstance(project).apply {
@@ -90,15 +148,7 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
             if (index == 0) {
                 // Stabilize only the first server, before opening the other root. Never reopen
                 // the second file to force discovery or change its measured ownership.
-                try {
-                    events.awaitDiagnostics(file, timeout = 5)
-                } catch (_: AssertionError) {
-                    println("Initial readiness control: reopening first file ${file.path}")
-                    FileEditorManager.getInstance(project).closeFile(file)
-                    myFixture.configureFromExistingVirtualFile(file)
-                    waitUntilFileOpenedByLspServer(project, file, timeout = 20)
-                    events.awaitDiagnostics(file)
-                }
+                awaitFirstServerReadiness(file)
             } else {
                 events.awaitDiagnostics(file)
             }
@@ -109,9 +159,21 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         formatAndAssert(childFile, "const message = 'child';\n", throughIde)
         formatAndAssert(parentFile, "const message = \"parent\";\n", throughIde)
         assertEquals("Both independent roots must have a server", 2, servers.size)
-        assertEquals(setOf("2.2.3", "2.5.15"), servers.map { it.initializeResult?.serverInfo?.version }.toSet())
+        assertEquals(setOf("2.5.14", "2.5.15"), servers.map { it.initializeResult?.serverInfo?.version }.toSet())
         assertEquals("Nested document must belong to its own root", setOf(childFile.parent),
             opened.filter { it.second == childFile }.flatMap { it.first.descriptor.roots.toList() }.toSet())
+    }
+
+    private fun awaitFirstServerReadiness(file: VirtualFile) {
+        try {
+            events.awaitDiagnostics(file, timeout = 5)
+        } catch (_: AssertionError) {
+            println("Initial readiness control: reopening first file ${file.path}")
+            FileEditorManager.getInstance(project).closeFile(file)
+            myFixture.configureFromExistingVirtualFile(file)
+            waitUntilFileOpenedByLspServer(project, file, timeout = 20)
+            events.awaitDiagnostics(file)
+        }
     }
 
     private fun formatAndAssert(file: VirtualFile, expected: String, throughIde: Boolean = false) {

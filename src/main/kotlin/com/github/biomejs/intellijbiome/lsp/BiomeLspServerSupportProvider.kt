@@ -140,8 +140,21 @@ private class BiomeLspServerDescriptor(
     override fun isSupportedFile(file: VirtualFile): Boolean {
         return BiomeSettings.getInstance(project).fileSupported(file)
             && roots.any { root ->
-                file.toNioPath().startsWith(root.toNioPath()) &&
-                    (!configPath.isNullOrEmpty() || file.findNearestBiomeConfig(root)?.parent == root)
+                if (!file.toNioPath().startsWith(root.toNioPath())) return@any false
+                if (!configPath.isNullOrEmpty()) return@any true
+                // Established nested workspaces retain ownership while their config is edited.
+                val nestedOwner = LspServerManager.getInstance(project)
+                    .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                    .any { server -> server.descriptor.roots.any { otherRoot ->
+                        otherRoot != root && otherRoot.toNioPath().startsWith(root.toNioPath()) &&
+                            file.toNioPath().startsWith(otherRoot.toNioPath())
+                    } }
+                if (nestedOwner) return@any false
+                val config = file.findNearestBiomeConfig(root)
+                // The IDE caches rejected paths for this server's lifetime. Keep an established
+                // root's files during temporary config errors; only a distinct independent root
+                // takes ownership. A non-root fallback still belongs to this running workspace.
+                config == null || config.parent == root || BiomeConfig.loadFromFile(config)?.isRootConfig() != true
             }
     }
 
