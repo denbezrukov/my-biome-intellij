@@ -55,6 +55,9 @@ dependencies {
       useInstaller = false
     }
 
+    // IDE tooling needs the matching JetBrains Runtime when the SDK has no bundled runtime.
+    jetbrainsRuntime()
+
     // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
     bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
 
