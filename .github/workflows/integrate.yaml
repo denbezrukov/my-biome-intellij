@@ -34,6 +34,7 @@ jobs:
       - name: Run plugin regression tests
         run: >-
           ./gradlew cleanTest test --no-build-cache
+          --tests '*BiomeConfigRecoveryLspTest'
           --tests '*BiomeManualConfigCliTest'
           --tests '*BiomeManualConfigLspTest'
           --tests '*BiomeManualConfigV1LspTest'
