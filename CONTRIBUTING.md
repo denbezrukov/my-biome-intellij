@@ -53,8 +53,8 @@ These suites exercise settings persistence, both Biome CLI versions, and real pl
 unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
 stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 241 named
-tests across 28 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 243 named
+tests across 29 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
 same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
 reports even when Gradle fails.
 
@@ -128,6 +128,14 @@ an already-open file after restart, use `openFileInEditor` and retain its editor
 modification stamp: fixture reconfiguration rewrites the file and can invalidate pending diagnostics.
 
 The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
+
+The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
+Node/native stop-ownership controls. The legacy cases require two actual projects, exact
+formatting, an unchanged second server and daemon, first-client proxy cleanup, and final-client
+daemon shutdown. They do not reopen documents after stopping or claim to solve 2.2.3's
+upstream first-open registration race. The 2.5.15 cases retain full replacement diagnostics
+and formatting assertions.
+
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
