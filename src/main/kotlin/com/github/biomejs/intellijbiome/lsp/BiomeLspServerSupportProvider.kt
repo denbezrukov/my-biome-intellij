@@ -6,6 +6,7 @@ import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
@@ -123,6 +124,13 @@ private class BiomeLspServerDescriptor(
             }
             // Until runBlocking returns successfully, cancellation can discard its result.
             // The SDK connector takes ownership only after this method returns.
+            // A proxy can be the parent of a daemon shared with other IDE projects.
+            // Normal shutdown must close this client's transport, not kill that daemon.
+            // Keep recursive cleanup for version probes and failed startup handoffs.
+            handler.setShouldDestroyProcessRecursively(false)
+            // Process.destroy closes stdin first; a raw SIGINT to a Node wrapper can
+            // leave its native proxy holding stdout open while waiting for stdin EOF.
+            (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
             pendingHandler = null
             handler
         } finally {

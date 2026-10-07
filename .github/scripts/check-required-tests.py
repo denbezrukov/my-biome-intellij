@@ -26,6 +26,10 @@ REQUIRED_TESTS = {
         "testVersion1LaunchPreservesSelectedJsonc",
         "testVersion1LegacyDirectoryLaunch",
     },
+    PACKAGE + "lsp.BiomeSharedDaemonLspTest": {
+        "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
+        "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",
+    },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
     },
