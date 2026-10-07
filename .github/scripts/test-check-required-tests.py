@@ -11,6 +11,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "actions.BiomeCheckOnSaveActionTest": (
+        "testFeatureSnapshotIsStable",
+        "testFileSpecificFailureFeedback",
+        "testIneligibleDocumentsAreSkipped",
+        "testPlatformCancellationPropagates",
+    ),
+    PACKAGE + "actions.BiomeSaveOperationTest": (
+        "testCancellationExceptionFromOperationIsPreserved",
+        "testCompletionAndFailure",
+        "testFeatureStagesShareOneBudget",
+        "testOuterTimeoutPropagates",
+        "testOwnTimeoutIsRecoverable",
+        "testParentCancellationPropagates",
+        "testPlatformCancellationPropagates",
+        "testPlatformControlFlowPropagates",
+    ),
     PACKAGE + "launcher.BiomeLauncherLspTest": (
         "testVersion1DescriptorPreservesSelectedLauncherAndConfig",
         "testVersion2DescriptorPreservesSelectedLauncherAndConfig",
@@ -27,6 +43,67 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     ),
+    PACKAGE + "lsp.BiomeConfigRecoveryLspTest": (
+        "testCopiedConfigStartsForAlreadyOpenFile",
+        "testDeleteAndRecreateConfigStartsOnce",
+        "testDisabledPluginDoesNotStartAfterConfigCreation",
+        "testExistingServerObservesConfigEditWithoutRestart",
+        "testExistingValidConfigStartsAndFormats",
+        "testExternalConfigCreationStartsForAlreadyOpenFile",
+        "testMalformedConfigRepairStartsForAlreadyOpenFile",
+        "testProjectDisposalPreventsLateServerStartAfterConfigEvent",
+        "testRecoveryPreservesAnotherProjectServer",
+        "testRecoveryPreservesUnrelatedRootServer",
+        "testRenameConfigStartsForAlreadyOpenFile",
+        "testReopenAfterExternalConfigCreationIsRecoveryControl",
+        "testStillMalformedConfigDoesNotStart",
+        "testUnsupportedFileDoesNotStartAfterConfigCreation",
+    ),
+    PACKAGE + "lsp.BiomeDependencyRefreshLifecycleTest": (
+        "testChangedPrereleaseIsAdoptedOnce",
+        "testClosedFailedRootDoesNotBlockHealthyRootUpgrade",
+        "testInterpreterChangeDuringProbePreservesWorkingServer",
+        "testReopenedIdleRootIsVerifiedBeforeProjectRestart",
+        "testSupersedingInstallEventInvalidatesSuccessfulOlderProbeImmediately",
+        "testUnchangedPrereleaseDoesNotRestart",
+    ),
+    PACKAGE + "lsp.BiomeDependencyUpgradeLspTest": (
+        "testClosedRootDoesNotBlockRemainingRootsUpgrade",
+        "testDependencyEventBurstAdoptsVersionBOnce",
+        "testDependencyRenameAndRecreationPreservesOldServerUntilValid",
+        "testDependencyUpgradePreservesAnotherProjectsServer",
+        "testDisabledModeDoesNotRefreshAfterDependencyUpgrade",
+        "testExistingRestartAdoptsInstalledVersionB",
+        "testExistingRestartKeepsAnotherProjectResponsiveWithoutAnInstall",
+        "testFailedReplacementKeepsWorkingServerThenRecovers",
+        "testManualModeDoesNotRefreshAfterDependencyUpgrade",
+        "testParentMonorepoLockAdoptsReplacementWithoutPackageRefresh",
+        "testProjectDisposalCancelsPendingDependencyRefresh",
+        "testProjectRestartRetainsSecondRootsOwnBinaryAndConfiguration",
+        "testRealInstallAdoptsVersionBWithoutRestart",
+        "testTemporarilyMissingInterpreterDoesNotLoseRefreshSubscription",
+        "testUpgradeWhileAnotherRootInitializesIsRetriedWhenItRuns",
+    ),
+    PACKAGE + "lsp.BiomeLanguageLspTest": (
+        "testArbitraryXmlPreservesNativeIdeFormatting",
+        "testDefaultGritUsesGritIdentityAndFormats",
+        "testDefaultSvgPreservesNativeIdeFormatting",
+        "testDisabledPluginSavesGritWithoutStartingOrFormatting",
+        "testExplicitSvgReturnsNoEditsWithHtmlDisabled",
+        "testExplicitSvgUsesSdkIdentityAndReturnsNoEditsWithHtmlEnabled",
+        "testGritFormatsAndPersistsThroughActualSave",
+    ),
+    PACKAGE + "lsp.BiomeLanguageRoutingTest": (
+        "testArbitraryXmlIsNotSupportedByDefault",
+        "testBaselineSdkUsesGritSuffixForLspIdentity",
+        "testBaselineSdkUsesSvgSuffixForLspIdentity",
+        "testDisabledPluginDisablesFormatting",
+        "testExplicitSvgExtensionRemainsSupported",
+        "testGritIsSupportedByDefault",
+        "testPersistedCustomExtensionsAreNotReplacedByNewDefaults",
+        "testResetToDefaultsLinkAppliesGritWithoutClaimingSvg",
+        "testSvgIsNotClaimedUntilOlderServerFallbackIsVerified",
+    ),
     PACKAGE + "lsp.BiomeManualConfigCliTest": (
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
@@ -41,8 +118,51 @@ REQUIRED_TESTS = {
         "testVersion1LaunchPreservesSelectedJsonc",
         "testVersion1LegacyDirectoryLaunch",
     ),
+    PACKAGE + "lsp.BiomeNestedRootsLspTest": (
+        "testChildThenParentIdeFormattingUsesChildServer",
+        "testChildThenParentServiceFormattingUsesChildServer",
+        "testExplicitManualConfigRetainsProjectWideOwnership",
+        "testMalformedEstablishedChildKeepsExclusiveOwnership",
+        "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
+        "testMissingExistingRootRetainsNonRootChildOwnership",
+        "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testParentThenChildIdeFormattingUsesChildServer",
+        "testParentThenChildServiceFormattingUsesChildServer",
+    ),
+    PACKAGE + "lsp.BiomeSaveActionsTest": (
+        "testCancellationBeforeWriteDoesNotMutate",
+        "testCancellationWhileWriteIsQueuedDoesNotMutate",
+        "testCrLfOnlyEditPersists",
+        "testEnabledFeaturesRunInOrderAndPersist",
+        "testIdeFormatOnSaveOrderingAndUndo",
+        "testLfOnlyEditPersists",
+        "testMissingServerIsNoOp",
+        "testOrganizeImportsPersistsRealServerEdits",
+        "testPartialSuccessPersistsAfterTimeout",
+        "testPlatformCancellationPropagates",
+        "testProjectDisposalCancelsPendingSave",
+        "testSaveAllContinuesAfterFileFailure",
+        "testSaveAllContinuesAfterFileTimeout",
+        "testSavePreservesCrLfBytes",
+        "testSavePreservesLfBytes",
+        "testSeparatorPersistsWhenEarlierEditsReturnToSavedText",
+        "testTypingDiscardsStaleResponseAndRemainingFeatures",
+        "testTypingDuringSaveCancelsOnlyThatDocument",
+    ),
+    PACKAGE + "lsp.BiomeSharedDaemonLspTest": (
+        "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
+        "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",
+    ),
+    PACKAGE + "lsp.OlderBiomeLanguageLspTest": (
+        "testDefaultGritFormatsAfterServerInitialization",
+        "testExplicitSvgReturnsNoEditsOnOlderBiome",
+    ),
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": (
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    ),
+    PACKAGE + "lsp.V1BiomeLanguageLspTest": (
+        "testJavascriptStillFormatsWithV1",
+        "testUnsupportedGritRemainsUnchangedWithV1",
     ),
     PACKAGE + "settings.BiomeManualConfigSettingsTest": (
         "testBlankOverrideRoundTrip",
@@ -110,7 +230,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("50 required tests across 9 classes", result.stdout)
+            self.assertIn("146 required tests across 21 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
