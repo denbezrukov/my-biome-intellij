@@ -139,6 +139,21 @@ input runs every gate and uploads evidence. Passing `true` additionally uploads 
 override accepts the version prepared by the caller. Outputs are `version`, `artifact-name`, and `sha256`; this workflow
 never publishes to a registry or creates a release.
 
+The release pipeline has a separate Python regression inventory (it does not change the JVM inventory above):
+
+```shell
+python3 -m pip install PyYAML==6.0.3
+python3 .github/scripts/test-release-artifact.py
+python3 .github/scripts/test-publish-draft.py
+```
+
+Its 15 tests cover stable/nightly version selection, the actual workflow validation command, nested JAR descriptor
+identity and minimum build, filename/version/SHA256 agreement, damaged or missing archives and descriptors, unsafe
+versions, dry-run authorization, and missing/failed/skipped/cancelled gate outcomes. The `Publish` workflow runs this
+inventory before selecting a version or invoking the compatibility gate. The separate 15-test draft-publication
+inventory mocks the GitHub API, including existing published/draft releases, lightweight/annotated tags, pagination,
+API failures, tag/release collisions, and exact ZIP upload bytes. These tests make no network requests or release writes.
+
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
 
 ```shell
@@ -161,33 +176,32 @@ The legacy Remote Robot UI tests are separate from this required gate. To run th
 
 ## Maintainers
 
-This section is for maintainers only. It describes the process for releasing a new version of the extension.
+The `Publish` workflow defaults to a nonpublishing dry run. It computes the stable or nightly version without changing
+`gradle.properties`, then calls the shared compatibility workflow to run the required tests and Plugin Verifier. Only
+that successful gate can upload the exact built `intellij-biome-VERSION.zip` artifact. The release job downloads it to
+`build/verified-release/`, checks its SHA256 against the gate output, and inspects its embedded descriptor. The
+`release-record-VERSION` artifact records the version, plugin ID/vendor, IDE build range, SHA256, and intended upload
+path. Download the ZIP from the verified build artifact for local installation or review.
 
-### Releasing a stable version
+For a stable dry run, prepare the changelog and `pluginVersion` on the release branch, then manually run `Publish` on
+that commit with `nightly` unchecked and `publish` unchecked. For a nightly dry run, check `nightly`; the filename and
+embedded version both use `BASE_VERSION-nightly.COMMIT_SHA7`.
 
-1. Create a new branch for the release.
-   ```shell
-   git fetch
-   git checkout -b release/vX.Y.Z main
-   ```
-2. Generate the changelog.
-   ```shell
-   git-cliff --bump e71479100d4ed81b3e9c26881c38a0ddb7da31eb..
-   ```
-3. Bump the version in `gradle.properties` and to match the latest version in the changelog.
-4. Commit and push your changes.
-5. Create a pull request named `chore(release): prepare vX.Y.Z`.
-6. Merge the pull request.
-7. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub (uncheck _nightly_).
+Creating a GitHub draft release requires explicitly checking the `publish` input. The publisher depends on both the
+compatibility gate and successful dry-run validation. It downloads the same artifact, validates it again, and uploads
+that exact ZIP without rebuilding or renaming it. The creation-only publisher refuses every existing release and
+version tag, including matching lightweight or annotated tags. It atomically creates a new tag at the workflow commit,
+then creates a new draft; it never updates a release or moves a tag. Concurrent workflow publishers for the same
+version are serialized. A collision or API failure stops publication; a tag or incomplete draft already created during
+that attempt is retained for manual inspection, and a rerun of the same version is refused. Running this workflow with
+its defaults creates no GitHub release or tag.
 
-### Releasing a nightly version
+GitHub's release and asset APIs are separate requests, so maintainers must leave the newly created draft unpublished
+until its ZIP upload completes. The publisher rechecks the draft and tag before and after upload; workflow concurrency
+covers this workflow's publishers, and cannot serialize independent manual or external release operations.
 
-1. Commit your changes to the _main_ branch.
-2. Generate the changelog.
-   ```shell
-   git-cliff e71479100d4ed81b3e9c26881c38a0ddb7da31eb..
-   ```
-3. Commit and push your changes.
-4. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub (check _nightly_).
+This fork has no Marketplace upload job. The plugin retains its upstream ID `com.github.biomejs.intellijbiome` and
+vendor `biomejs`; those identifiers do not authorize a fork to publish an update to the upstream Marketplace listing.
+Any future Marketplace automation must explicitly authorize its repository and release channel and consume the
+verified archive through the supported Gradle `PublishPluginTask.archiveFile` property. The removed
+`-PdistributionFile` argument was ignored by the Gradle plugin and did not select the downloaded artifact.
