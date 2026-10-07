@@ -149,6 +149,9 @@ abstract class BiomeLanguageLspTestBase(private val version: String) : BiomeLspF
 
     protected fun saveThroughIde(name: String, input: String, languageId: String, expected: String) {
         val file = openThroughPlugin(name, input, languageId)
+        // didOpen is sent before Biome finishes configuring the workspace. Await the
+        // advertised formatter before editing/saving, as the Reformat case does.
+        assertFormattingRegistrationHasNoDocumentSelector()
         BiomeSettings.getInstance(project).formatOnSave = true
         val document = myFixture.editor.document
         WriteCommandAction.runWriteCommandAction(project) { document.insertString(document.textLength, " ") }
