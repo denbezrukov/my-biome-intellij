@@ -50,9 +50,17 @@ python3 .github/scripts/check-required-tests.py build/test-results/test
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 162 named
-tests across 21 classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 164 named
+tests across 22 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
+
+The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
+Node/native stop-ownership controls. The legacy cases require two actual projects, exact
+formatting, an unchanged second server and daemon, first-client proxy cleanup, and final-client
+daemon shutdown. They do not reopen documents after stopping or claim to solve 2.2.3's
+upstream first-open registration race. The 2.5.15 cases retain full replacement diagnostics
+and formatting assertions.
+
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
