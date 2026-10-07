@@ -53,7 +53,7 @@ These suites exercise settings persistence, both Biome CLI versions, and real pl
 unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
 stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 232 named
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 233 named
 tests across 27 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
 same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
 reports even when Gradle fails.
@@ -73,6 +73,7 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 - `testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace`
 - `testClosedEditorInvalidatesQueuedNestedRecovery`
 - `testMalformedConfigInvalidatesQueuedNestedRecovery`
+- `testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension`
 - `testDisabledModeDoesNotRecoverNestedConfig`
 - `testManualModeDoesNotRecoverNestedConfig`
 - `testNestedRepairPreservesAnotherProjectServer`

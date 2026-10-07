@@ -173,6 +173,7 @@ REQUIRED_TESTS = {
     PACKAGE + "lsp.BiomeNestedRootsLspTest": {
         "testClosedEditorInvalidatesQueuedNestedRecovery",
         "testMalformedConfigInvalidatesQueuedNestedRecovery",
+        "testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension",
         "testChildFirstPublicRestartRestoresBothWorkspaces",
         "testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace",
         "testChildThenParentIdeFormattingUsesChildServer",
