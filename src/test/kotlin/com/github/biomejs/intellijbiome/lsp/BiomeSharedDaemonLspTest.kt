@@ -89,13 +89,13 @@ abstract class BiomeSharedDaemonFixtureTestCase(private val biomeVersion: String
         // Keep the temporary path short enough for Biome's Unix-domain socket.
         val cache = Files.createTempDirectory("biome-shared-")
         try {
-            EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(
+            com.github.biomejs.intellijbiome.launcher.setTestEnvironment(
                 originalEnvironment + ("XDG_CACHE_HOME" to cache.toString())
-            ))
+            )
             checkLifecycleInIsolatedCache(nativePrimary, restartPrimary)
         } finally {
             try {
-                EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(originalEnvironment))
+                com.github.biomejs.intellijbiome.launcher.setTestEnvironment(originalEnvironment)
             } finally {
                 FileUtil.delete(cache.toFile())
             }
@@ -115,6 +115,10 @@ abstract class BiomeSharedDaemonFixtureTestCase(private val biomeVersion: String
         }
         val original = establishPrimaryServer()
         com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        // Establish still-live primary native state before the secondary fixture
+        // snapshots global listener and package.json-pointer leak baselines.
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
+        myFixture.doHighlighting()
         val factory = IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-other-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)

@@ -242,6 +242,12 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
     private fun checkOtherProject(manualRestartOnly: Boolean) {
         val original = establishVersionA()
         com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        // The secondary fixture snapshots global editor listeners. Register the
+        // still-live primary project's lazy listener before that snapshot.
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
+        // Native JS annotation also owns package.json pointers in this project.
+        // Complete that work before the secondary fixture captures its leak baseline.
+        myFixture.doHighlighting()
         val factory = IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-other-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)
@@ -296,6 +302,7 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
 
     fun testProjectDisposalCancelsPendingDependencyRefresh() {
         com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
         val factory = IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-disposing-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)

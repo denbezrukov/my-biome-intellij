@@ -278,7 +278,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
 
     fun testSavePreservesCrLfBytes() = checkLineSeparators("crlf", "\r\n")
 
-    fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n")
+    fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n", moveCaretBeforeRedo = true)
 
     fun testLfOnlyEditPersists() = checkSeparatorOnlyEdit("\r\n", "\n")
 
@@ -427,13 +427,23 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
     }
 
     private fun writeOutsideVfs(file: com.intellij.openapi.vfs.VirtualFile, text: String) {
+        awaitPhysicalFileWrites(file)
         val path = Path.of(file.path)
         val timestamp = file.timeStamp
         Files.writeString(path, text)
         Files.setLastModifiedTime(path, FileTime.fromMillis(timestamp + 10_000))
     }
 
-    private fun checkSeparatorOnlyEdit(originalSeparator: String, requestedSeparator: String, earlierEdit: Boolean = false) {
+    private fun checkSeparatorOnlyEdit(
+        originalSeparator: String,
+        requestedSeparator: String,
+        earlierEdit: Boolean = false,
+        moveCaretBeforeRedo: Boolean = false,
+    ) {
+        // This control checks document undo groups. Native caret restoration can
+        // consume a redo without applying that group; make caret motion transparent.
+        com.intellij.openapi.util.registry.Registry.get("ide.undo.transparent.caret.movement")
+            .setValue(true, testRootDisposable)
         val document = openDocuments().last()
         val file = FileDocumentManager.getInstance().getFile(document)!!
         val formatted = "const value = 1;\nconsole.log(value);\n"
@@ -472,6 +482,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
         assertEquals("Undo must preserve normalized editor text", formatted, document.text)
         assertEquals(formatted.replace("\n", originalSeparator), diskText(document))
         assertTrue(undo.isRedoAvailable(editor))
+        if (moveCaretBeforeRedo) myFixture.editor.caretModel.moveToOffset(formatted.length - 1)
         undo.redo(editor)
         assertEquals(formatted, document.text)
         assertEquals(formatted.replace("\n", requestedSeparator), diskText(document))
@@ -568,18 +579,42 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
             WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
             saveAndAwaitCompletion(myFixture, listOf(document))
             assertNotNull(beforeBiome.get())
-            assertFalse("2025.3 must finish its legacy IDE formatter before Biome starts", input == beforeBiome.get())
+            val modernFormatter = com.intellij.ide.actionsOnSave.impl.ActionsOnSaveFileDocumentManagerListener
+                .DocumentUpdatingActionOnSave::class.java.isAssignableFrom(
+                    Class.forName("com.intellij.codeInsight.actions.onSave.FormatOnSaveAction"))
+            if (modernFormatter) {
+                assertEquals("The document-updating IDE formatter follows the declared Biome-first order", input, beforeBiome.get())
+            } else {
+                assertFalse("253 must finish its legacy IDE formatter before Biome starts", input == beforeBiome.get())
+            }
             assertEquals(listOf("fix", "imports", "format"), requests.toList())
-            val saved = "// format\n// imports\n// fix\n" + beforeBiome.get()
+            val biomeOutput = "// format\n// imports\n// fix\n" + beforeBiome.get()
+            val saved = if (modernFormatter) {
+                WriteCommandAction.runWriteCommandAction(project, com.intellij.openapi.util.Computable {
+                    val copy = com.intellij.psi.PsiFileFactory.getInstance(project)
+                        .createFileFromText("native-control.js", myFixture.file.fileType, biomeOutput)
+                    com.intellij.psi.codeStyle.CodeStyleManager.getInstance(project).reformat(copy).text
+                }).also { assertFalse("The modern IDE formatter must change the Biome output control", it == biomeOutput) }
+            } else biomeOutput
             assertEquals(saved, document.text)
             assertEquals(saved, diskText(document))
             val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
             val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
             assertTrue(undo.isUndoAvailable(editor))
             undo.undo(editor)
+            if (modernFormatter) {
+                assertEquals("The first undo reverses only the later native formatter", biomeOutput, document.text)
+                assertTrue(undo.isUndoAvailable(editor))
+                undo.undo(editor)
+            }
             assertEquals("All Biome feature edits must be one undo group", beforeBiome.get(), document.text)
             assertTrue(undo.isRedoAvailable(editor))
             undo.redo(editor)
+            if (modernFormatter) {
+                assertEquals("The first redo restores the complete Biome feature group", biomeOutput, document.text)
+                assertTrue(undo.isRedoAvailable(editor))
+                undo.redo(editor)
+            }
             assertEquals(saved, document.text)
             assertEquals("Undo/redo must not restart Biome", 3, requests.size)
         } finally {
@@ -703,6 +738,8 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
 
     private fun diskText(document: Document): String {
         val file = FileDocumentManager.getInstance().getFile(document) ?: error("Document has no backing file")
+        awaitPhysicalFileWrites(file)
         return Files.readString(Path.of(file.path))
     }
+
 }

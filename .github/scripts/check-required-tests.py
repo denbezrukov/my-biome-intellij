@@ -12,6 +12,10 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "lsp.BiomeIdeRuntimeTest": {
+        "testPinnedIdeRuntimeIsActuallyLoaded",
+        "testMinimumCompiledPluginIsLoadedInRuntime",
+    },
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": {
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",
