@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": {
+        "testDisabledPreferencesExecuteNoSaveWork",
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",
         "testIneligibleDocumentsAreSkipped",
@@ -180,6 +181,13 @@ REQUIRED_TESTS = {
     PACKAGE + "lsp.V1BiomeLanguageLspTest": {
         "testJavascriptStillFormatsWithV1",
         "testUnsupportedGritRemainsUnchangedWithV1",
+    },
+    PACKAGE + "settings.BiomeDisabledPreferencesTest": {
+        "testActionsOnSaveResetAndApplyPreserveDisabledPreferences",
+        "testCancelDoesNotChangePreferencesOrMode",
+        "testDisableApplyReopenEnablePreservesPreferences",
+        "testDisabledSerializationPreservesPreferences",
+        "testInitiallyDisabledApplyPreservesPreferences",
     },
     PACKAGE + "settings.BiomeManualConfigSettingsTest": {
         "testBlankOverrideRoundTrip",
