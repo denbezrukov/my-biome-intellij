@@ -118,12 +118,16 @@ abstract class BiomeLanguageLspTestBase(private val version: String) : BiomeLspF
         FileDocumentManager.getInstance().saveDocument(myFixture.editor.document)
         settings.configurationMode = ConfigurationMode.MANUAL
         FileEditorManager.getInstance(project).closeFile(file)
+        // An excluded file must not be responsible for starting Biome. Keep a supported
+        // document open so native fallback is tested while Biome formatting is registered.
+        openThroughPlugin("native-format-control.js", "const control = 1;", "javascript")
+        assertFormattingRegistrationHasNoDocumentSelector()
         myFixture.configureFromExistingVirtualFile(file)
-        PlatformTestUtil.waitWithEventsDispatching("Biome server did not initialize for routing control", {
+        assertTrue("The supported control must keep Biome active during native formatting",
             LspServerManager.getInstance(project)
                 .getServersForProvider(BiomeLspServerSupportProvider::class.java)
                 .any { it.state == com.intellij.platform.lsp.api.LspServerState.Running }
-        }, 30)
+        )
         myFixture.performEditorAction("ReformatCode")
         assertEquals("Enabling Biome must preserve the complete native IDE output", nativeOutput,
             myFixture.editor.document.text)
