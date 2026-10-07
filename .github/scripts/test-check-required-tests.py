@@ -151,6 +151,8 @@ REQUIRED_TESTS = {
         "testVersion1LegacyDirectoryLaunch",
     ),
     PACKAGE + "lsp.BiomeNestedRootsLspTest": (
+        "testClosedEditorInvalidatesQueuedNestedRecovery",
+        "testMalformedConfigInvalidatesQueuedNestedRecovery",
         "testChildFirstPublicRestartRestoresBothWorkspaces",
         "testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace",
         "testChildThenParentIdeFormattingUsesChildServer",
@@ -286,7 +288,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("196 required tests across 24 classes", result.stdout)
+            self.assertIn("198 required tests across 24 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

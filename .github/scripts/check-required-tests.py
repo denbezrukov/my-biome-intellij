@@ -152,6 +152,8 @@ REQUIRED_TESTS = {
         "testVersion1LegacyDirectoryLaunch",
     },
     PACKAGE + "lsp.BiomeNestedRootsLspTest": {
+        "testClosedEditorInvalidatesQueuedNestedRecovery",
+        "testMalformedConfigInvalidatesQueuedNestedRecovery",
         "testChildFirstPublicRestartRestoresBothWorkspaces",
         "testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace",
         "testChildThenParentIdeFormattingUsesChildServer",
