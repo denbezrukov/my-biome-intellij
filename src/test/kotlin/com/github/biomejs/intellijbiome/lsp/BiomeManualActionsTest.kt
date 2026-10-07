@@ -135,6 +135,80 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
         }
     }
 
+    fun testBothActionsReportDisabledActionsAsUnavailable() {
+        openFile()
+        replaceRequests { _, params -> disabledResponse(params) }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome actions unavailable", "No changes were applied")
+        }
+    }
+
+    fun testBothActionsReportCommandEntriesAsUnavailable() {
+        openFile()
+        replaceRequests { _, _ -> listOf(Either.forLeft(Command("controlled unsupported command", "fixture.command", emptyList()))) }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome actions unavailable", "could not be applied")
+        }
+    }
+
+    fun testBothActionsReportUnavailableCodeActions() {
+        openFile()
+        replaceRequests { _, _ -> listOf(Either.forRight(CodeAction("controlled unavailable action"))) }
+        for (action in actions) {
+            val before = myFixture.editor.document.text
+            invoke(action)
+            assertEquals(before, myFixture.editor.document.text)
+            assertNotification(NotificationType.WARNING, "Biome actions unavailable", "could not be applied")
+        }
+    }
+
+    fun testBothActionsReportAppliedAndSkippedActionsAsPartial() {
+        openFile()
+        var skippedFirst = false
+        replaceRequests { _, params ->
+            val applied = response(params, "// applied edit\n")
+            val skipped = disabledResponse(params)
+            if (skippedFirst) skipped + applied else applied + skipped
+        }
+        for (action in actions) {
+            for (disabledFirst in listOf(false, true)) {
+                skippedFirst = disabledFirst
+                val before = myFixture.editor.document.text
+                invoke(action)
+                assertEquals("// applied edit\n$before", myFixture.editor.document.text)
+                assertNotification(NotificationType.WARNING, "Some Biome actions were not applied", "Some changes were applied")
+                assertTrue(notifications.single().content.contains("other returned actions were unavailable"))
+                UndoManager.getInstance(project).undo(TextEditorProvider.getInstance().getTextEditor(myFixture.editor))
+                assertEquals(before, myFixture.editor.document.text)
+            }
+        }
+    }
+
+    fun testBothActionsReportUnchangedAndSkippedActionsAsUnavailable() {
+        openFile()
+        var skippedFirst = false
+        replaceRequests { _, params ->
+            val unchanged = response(params, "")
+            val skipped = disabledResponse(params)
+            if (skippedFirst) skipped + unchanged else unchanged + skipped
+        }
+        for (action in actions) {
+            for (disabledFirst in listOf(false, true)) {
+                skippedFirst = disabledFirst
+                val before = myFixture.editor.document.text
+                invoke(action)
+                assertEquals(before, myFixture.editor.document.text)
+                assertNotification(NotificationType.WARNING, "Biome actions unavailable", "No changes were applied")
+            }
+        }
+    }
+
     fun testBothActionsApplyEditsAndUndo() {
         openFile()
         replaceRequests { _, params -> response(params, "// manual edit\n") }
@@ -304,6 +378,11 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
         listOf(Either.forRight(CodeAction("controlled manual edit").apply {
             edit = WorkspaceEdit(mapOf(params.textDocument.uri to listOf(TextEdit(Range(Position(0, 0), Position(0, 0)), text))))
         }))
+
+    private fun disabledResponse(params: CodeActionParams): List<Either<Command, CodeAction>> =
+        response(params, "// disabled edit must not be applied\n").onEach {
+            it.right.disabled = CodeActionDisabled("controlled unavailable fix")
+        }
 
     private fun event(action: AnAction, editor: Boolean = true): AnActionEvent {
         val context = DataContext { key ->

@@ -47,7 +47,7 @@ class BiomeServerService internal constructor(
     }
 
     enum class Outcome {
-        Changed, Unchanged, Unavailable, Stale
+        Changed, Unchanged, Unavailable, Stale, NotApplied, PartiallyChanged
     }
 
     companion object {
@@ -79,6 +79,7 @@ class BiomeServerService internal constructor(
         val file = readAction { FileDocumentManager.getInstance().getFile(document) } ?: return Outcome.Unavailable
         val server = getServer(file) ?: return Outcome.Unavailable
         var changed = false
+        var skipped = false
         val commandName = BiomeBundle.message("biome.run.biome.check.with.features",
             features.joinToString(prefix = "(", postfix = ")") { it.toString().lowercase() })
 
@@ -102,10 +103,9 @@ class BiomeServerService internal constructor(
             if (!applyIfCurrent(document, file, stamp, commandName) {
                     val before = document.text
                     actions?.forEach { result ->
-                        if (result.isRight) {
-                            val action = LspIntentionAction(server, result.right)
-                            if (action.isAvailable()) action.invoke(file)
-                        }
+                        val action = if (result.isRight) LspIntentionAction(server, result.right) else null
+                        if (action != null && action.isAvailable()) action.invoke(file)
+                        else skipped = true
                     }
                     changed = changed || document.text != before
                 }) return Outcome.Stale
@@ -128,7 +128,12 @@ class BiomeServerService internal constructor(
                     }) return Outcome.Stale
             }
         }
-        return if (changed) Outcome.Changed else Outcome.Unchanged
+        return when {
+            skipped && changed -> Outcome.PartiallyChanged
+            skipped -> Outcome.NotApplied
+            changed -> Outcome.Changed
+            else -> Outcome.Unchanged
+        }
     }
 
     private suspend fun applyIfCurrent(
