@@ -18,7 +18,8 @@ class BiomeSettings :
             state.executablePath = value
         }
     var configPath: String
-        get() = state.configPath ?: ""
+        // Persisted state bypasses the setter, including whitespace saved by older versions.
+        get() = state.configPath?.takeUnless { it.isBlank() } ?: ""
         set(value) {
             state.configPath = if (value.isBlank()) "" else value
         }
@@ -76,6 +77,13 @@ class BiomeSettings :
 
     fun isEnabled(): Boolean {
         return configurationMode !== ConfigurationMode.DISABLED
+    }
+
+    /** Blank manual overrides use the same config discovery as Automatic mode. */
+    internal fun usesConfigDiscovery(): Boolean = when (configurationMode) {
+        ConfigurationMode.AUTOMATIC -> true
+        ConfigurationMode.MANUAL -> configPath.isEmpty()
+        ConfigurationMode.DISABLED -> false
     }
 
     fun fileSupported(file: VirtualFile): Boolean {

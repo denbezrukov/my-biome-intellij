@@ -1,26 +1,45 @@
 package com.github.biomejs.intellijbiome.lsp
 
+import com.github.biomejs.intellijbiome.BiomePackage
+import com.github.biomejs.intellijbiome.BiomeTargetRun
+import com.github.biomejs.intellijbiome.BiomeTargetRunBuilder
+import com.github.biomejs.intellijbiome.ProcessCommandParameter
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.extensions.isBiomeConfigFile
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
+import com.intellij.execution.ExecutionException
+import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileCopyEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspServerState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 
-/** Retries initial discovery; running servers retain ownership of configuration watching. */
+/** Recovers unowned open files; established owners keep watching their own configuration. */
 @Service(Service.Level.PROJECT)
 class BiomeConfigDiscoveryService(private val project: Project, private val scope: CoroutineScope) {
     init {
@@ -33,33 +52,159 @@ class BiomeConfigDiscoveryService(private val project: Project, private val scop
                     }
                         .filter { it.isValid && it.isBiomeConfigFile() }.distinct()
                     if (configs.isEmpty() || project.isDisposed) return
-                    scope.launch {
-                        val shouldDiscover = readAction { needsDiscovery(configs) }
-                        if (shouldDiscover && !project.isDisposed) {
-                            LspServerManager.getInstance(project)
-                                .startServersIfNeeded(BiomeLspServerSupportProvider::class.java)
-                        }
-                    }
+                    scope.launch { recoverOpenFiles(configs) }
                 }
             })
     }
 
-    private fun needsDiscovery(configs: List<VirtualFile>): Boolean {
-        if (project.isDisposed) return false
-        val settings = BiomeSettings.getInstance(project)
-        if (settings.configurationMode != ConfigurationMode.AUTOMATIC) return false
-        val roots = project.getBaseDirectories()
-        val changedConfigs = configs.filter { config -> roots.any { VfsUtilCore.isAncestor(it, config, true) } }
-        if (changedConfigs.isEmpty()) return false
-        val servers = LspServerManager.getInstance(project)
-            .getServersForProvider(BiomeLspServerSupportProvider::class.java)
-        return FileEditorManager.getInstance(project).openFiles.any { file ->
-            file.isValid && settings.fileSupported(file) &&
-                changedConfigs.any { VfsUtilCore.isAncestor(it.parent, file, true) } &&
-                // startServersIfNeeded itself skips existing descriptor roots. Dynamic nested-root
-                // reparenting therefore remains separate from recovery of an uncovered open file.
-                servers.none { server -> server.descriptor.roots.any { VfsUtilCore.isAncestor(it, file, true) } } &&
-                roots.any { root -> VfsUtilCore.isAncestor(root, file, true) && file.findNearestBiomeConfig(root) != null }
+    private suspend fun recoverOpenFiles(configs: List<VirtualFile>) {
+        // A repair can race public restart and its asynchronous descriptor publication.
+        // Recheck changed snapshots instead of restarting a newly published replacement.
+        withTimeoutOrNull(30_000) {
+            while (true) {
+                val request = readAction { discoveryRequest(configs) } ?: break
+                if (request.restart && !canRestart(request)) {
+                    delay(250)
+                    continue
+                }
+                val completed = withContext(Dispatchers.EDT) {
+                    if (project.isDisposed || !BiomeSettings.getInstance(project).usesConfigDiscovery()) {
+                        return@withContext true
+                    }
+                    val manager = LspServerManager.getInstance(project)
+                    val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toSet()
+                    if (current != request.servers || captureInputs() != request.inputs ||
+                        (request.restart && current.any { it.state == LspServerState.Initializing })) {
+                        return@withContext false
+                    }
+                    if (request.restart) {
+                        // SDK discovery skips descendants of existing roots regardless of
+                        // actual ownership. Restart also clears that server's rejected-path
+                        // cache and closes any documents it opened during the invalid edit.
+                        manager.stopAndRestartIfNeeded(BiomeLspServerSupportProvider::class.java)
+                    } else {
+                        manager.startServersIfNeeded(BiomeLspServerSupportProvider::class.java)
+                    }
+                    true
+                }
+                if (completed) break
+                delay(100)
+            }
         }
     }
+
+    private fun discoveryRequest(configs: List<VirtualFile>): DiscoveryRequest? {
+        if (project.isDisposed) return null
+        val settings = BiomeSettings.getInstance(project)
+        if (!settings.usesConfigDiscovery()) return null
+        val inputs = captureInputs()
+        val roots = inputs.roots
+        val changedConfigs = configs.filter { config -> config.isValid && roots.any { VfsUtilCore.isAncestor(it, config, true) } }
+        if (changedConfigs.isEmpty()) return null
+        val servers = LspServerManager.getInstance(project)
+            .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+        val fileIndex = ProjectFileIndex.getInstance(project)
+        val uncovered = inputs.openFiles.filter { file ->
+            file.isValid && file.isInLocalFileSystem && fileIndex.isInContent(file) && settings.fileSupported(file) &&
+                changedConfigs.any { VfsUtilCore.isAncestor(it.parent, file, true) } &&
+                servers.none { it.descriptor.isSupportedFile(file) } &&
+                roots.any { root -> VfsUtilCore.isAncestor(root, file, true) && file.findNearestBiomeConfig(root) != null }
+        }
+        if (uncovered.isEmpty()) return null
+        val blockedByAncestor = uncovered.any { file ->
+            servers.any { server -> server.descriptor.roots.any { VfsUtilCore.isAncestor(it, file, true) } }
+        }
+        return DiscoveryRequest(servers.toSet(), blockedByAncestor, inputs)
+    }
+
+    private suspend fun canRestart(request: DiscoveryRequest): Boolean {
+        try {
+            val candidates = readAction { restartCandidates(request) } ?: return false
+            return withContext(Dispatchers.IO) {
+                val verified = candidates.map { candidate ->
+                    val before = executableIdentity(candidate.executable)
+                    BiomePackage(project).versionNumber(candidate.probe)
+                    if (before != executableIdentity(candidate.executable)) return@withContext false
+                    candidate.executable to before
+                }
+                verified.all { (executable, identity) -> identity == executableIdentity(executable) }
+            }
+        } catch (_: ExecutionException) {
+            return false
+        } catch (_: IOException) {
+            return false
+        }
+    }
+
+    private fun restartCandidates(request: DiscoveryRequest): List<RestartCandidate>? {
+        if (project.isDisposed || captureInputs() != request.inputs ||
+            request.servers.any { it.state == LspServerState.Initializing }) return null
+        val settings = BiomeSettings.getInstance(project)
+        val index = ProjectFileIndex.getInstance(project)
+        val files = request.inputs.openFiles.filter {
+            it.isValid && it.isInLocalFileSystem && index.isInContent(it) && settings.fileSupported(it)
+        }
+        val biome = BiomePackage(project)
+        val selections = files.mapNotNull { file ->
+            val projectRoot = request.inputs.roots.firstOrNull { VfsUtilCore.isAncestor(it, file, true) }
+                ?: return@mapNotNull null
+            val root = file.findNearestBiomeConfig(projectRoot)?.parent ?: return@mapNotNull null
+            val executable = biome.binaryPath(root.path, file, false) ?: return null
+            root to executable
+        }.distinct()
+        // A public restart also removes unrelated live roots. Every active root must
+        // be reconstructable from its open files, using every executable they can select.
+        val rebuiltRoots = selections.map { it.first }.toSet()
+        if (request.servers.any { server ->
+            server.state == LspServerState.Running && files.any { server.descriptor.isSupportedFile(it) } &&
+                server.descriptor.roots.any { it !in rebuiltRoots }
+        }) return null
+        return selections.map { (root, executable) ->
+            RestartCandidate(executable, BiomeTargetRunBuilder(project).getBuilder(executable, root.path)
+                .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build())
+        }
+    }
+
+    private fun executableIdentity(executable: String): ExecutableIdentity {
+        val path = Path.of(executable).toRealPath()
+        return ExecutableIdentity(path, Files.size(path), Files.getLastModifiedTime(path))
+    }
+
+    private data class RestartCandidate(val executable: String, val probe: BiomeTargetRun)
+    private data class ExecutableIdentity(val realPath: Path, val size: Long, val modified: FileTime)
+    private data class InterpreterIdentity(val configuredReference: String, val resolvedReference: String?, val implementation: String?)
+
+    // Compare cheap metadata on EDT; config parsing stays in the pooled read action.
+    private fun captureInputs(): DiscoveryInputs {
+        val settings = BiomeSettings.getInstance(project)
+        val interpreters = NodeJsInterpreterManager.getInstance(project)
+        val interpreter = interpreters.interpreter
+        return DiscoveryInputs(
+            VirtualFileManager.getInstance().modificationCount,
+            ProjectRootManager.getInstance(project).modificationCount,
+            FileEditorManager.getInstance(project).openFiles.toSet(),
+            project.getBaseDirectories().toSet(),
+            settings.configurationMode, settings.configPath, settings.executablePath,
+            settings.supportedExtensions.toSet(),
+            InterpreterIdentity(interpreters.interpreterRef.referenceName, interpreter?.referenceName, interpreter?.javaClass?.name),
+        )
+    }
+
+    private data class DiscoveryRequest(
+        val servers: Set<LspServer>,
+        val restart: Boolean,
+        val inputs: DiscoveryInputs,
+    )
+
+    private data class DiscoveryInputs(
+        val vfsModificationCount: Long,
+        val projectRootsModificationCount: Long,
+        val openFiles: Set<VirtualFile>,
+        val roots: Set<VirtualFile>,
+        val mode: ConfigurationMode,
+        val configPath: String,
+        val executablePath: String,
+        val supportedExtensions: Set<String>,
+        val interpreter: InterpreterIdentity,
+    )
 }

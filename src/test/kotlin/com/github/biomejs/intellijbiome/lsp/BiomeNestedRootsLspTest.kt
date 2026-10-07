@@ -17,6 +17,7 @@ import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.replaceService
 import kotlinx.coroutines.*
 import java.util.concurrent.CopyOnWriteArrayList
 import java.nio.file.Files
@@ -57,6 +58,356 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         }, testRootDisposable, true)
     }
 
+    fun testRepairAfterMalformedChildRestartRestoresIndependentWorkspace() = checkMalformedRestartRepair()
+    fun testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace() = checkMalformedRestartRepair(parentFirst = false)
+    fun testRepairWithoutRestartControlRestoresIndependentWorkspace() = checkMalformedRestartRepair(restart = false)
+    fun testRepairAfterDependencyRefreshRestoresIndependentWorkspace() = checkMalformedRestartRepair(dependencyRefresh = true)
+    fun testDisabledModeDoesNotRecoverNestedConfig() = checkMalformedRestartRepair(mode = ConfigurationMode.DISABLED)
+    fun testManualModeDoesNotRecoverNestedConfig() = checkMalformedRestartRepair(mode = ConfigurationMode.MANUAL)
+
+    fun testClosedEditorInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = true)
+    fun testMalformedConfigInvalidatesQueuedNestedRecovery() = checkQueuedRecoveryInvalidation(closeEditor = false)
+
+    fun testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension() {
+        val dispatcher = QueuedDiscoveryDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        var reachedEdt = false
+        try {
+            scope.launch {
+                // withContext can return without suspension when its work finishes inline.
+                withContext(CoroutineName("completed-read")) { Unit }
+                withContext(Dispatchers.EDT) { reachedEdt = true }
+            }
+            dispatcher.runPendingReads(scope, expectEdt = true)
+            assertFalse("The barrier must leave the EDT action queued", reachedEdt)
+            PlatformTestUtil.waitWithEventsDispatching("Queued EDT action never ran", { reachedEdt }, 5)
+        } finally {
+            scope.cancel()
+            dispatcher.drainCancelledTasks()
+        }
+    }
+
+    private fun checkQueuedRecoveryInvalidation(closeEditor: Boolean) {
+        val dispatcher = QueuedDiscoveryDispatcher()
+        val discoveryScope = CoroutineScope(SupervisorJob() + dispatcher)
+        com.intellij.openapi.util.Disposer.register(testRootDisposable) {
+            discoveryScope.cancel()
+            dispatcher.drainCancelledTasks()
+        }
+        project.replaceService(BiomeConfigDiscoveryService::class.java,
+            BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
+        exercise(parentFirst = true)
+        orderOpenFiles(parentFirst = true)
+        val manager = LspServerManager.getInstance(project)
+        val original = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val config = childFile.parent.toNioPath().resolve("biome.json")
+        val valid = Files.readString(config)
+        Files.writeString(config, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        dispatcher.runPendingReads(discoveryScope)
+        project.service<BiomeServerService>().restartBiomeServer()
+        PlatformTestUtil.waitWithEventsDispatching("Malformed restart did not establish the parent-only precondition", {
+            val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            current.size == 1 && current.none { it in original } && current.single().initializeResult != null
+        }, 20)
+        val beforeRepair = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        Files.writeString(config, valid)
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        assertFalse(beforeRepair.single().descriptor.isSupportedFile(childFile))
+        // The real recovery coroutine finishes its pooled read, then suspends on the held EDT.
+        // No event dispatch is allowed between this barrier and the invalidating change.
+        dispatcher.runPendingReads(discoveryScope, expectEdt = true)
+        if (closeEditor) FileEditorManager.getInstance(project).closeFile(childFile)
+        else {
+            Files.writeString(config, "{broken-again")
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+            assertTrue(beforeRepair.single().descriptor.isSupportedFile(childFile))
+        }
+        settleServers(beforeRepair)
+    }
+
+    fun testNestedRepairPreservesAnotherProjectServer() {
+        exercise(parentFirst = true)
+        FileDocumentManager.getInstance().saveAllDocuments()
+        com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        // Register primary-project editor listeners and package.json pointers before
+        // the secondary fixture takes its global leak-tracking snapshot.
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
+        for (file in listOf(childFile, parentFile)) {
+            myFixture.configureFromExistingVirtualFile(file)
+            myFixture.doHighlighting()
+        }
+        val factory = com.intellij.testFramework.fixtures.IdeaTestFixtureFactory.getFixtureFactory()
+        val builder = factory.createFixtureBuilder("${name}-other-project")
+        val otherFixture = factory.createCodeInsightFixture(builder.fixture)
+        builder.addModule(com.intellij.testFramework.builders.EmptyModuleFixtureBuilder::class.java)
+            .addSourceContentRoot(otherFixture.tempDirPath)
+        otherFixture.setUp()
+        try {
+            val otherProject = otherFixture.project
+            configureLocalNodeForRuntimeTests(otherProject, otherFixture.testRootDisposable)
+            otherFixture.testDataPath = myFixture.testDataPath
+            val otherRoot = otherFixture.tempDirFixture.findOrCreateDir(".")
+            TestNpmPackageInstaller(otherFixture).installForTest(javaClass, otherRoot)
+            otherFixture.tempDirFixture.createFile("biome.json", "{}")
+            val other = otherFixture.tempDirFixture.createFile("other.js", "const other=1;\n")
+            otherFixture.configureFromExistingVirtualFile(other)
+            waitUntilFileOpenedByLspServer(otherProject, other, timeout = 20)
+            val otherManager = LspServerManager.getInstance(otherProject)
+            val original = otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
+            checkMalformedRestartRepair(established = true)
+            assertEquals(listOf(original), otherManager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
+            val operationScope = CoroutineScope(SupervisorJob() + Dispatchers.EDT)
+            try {
+                val operation = operationScope.async {
+                    withTimeout(15_000) { otherProject.service<BiomeServerService>().format(otherFixture.editor.document) }
+                }
+                PlatformTestUtil.waitWithEventsDispatching("Other project became unresponsive", { operation.isCompleted }, 20)
+                runBlocking { operation.await() }
+                assertEquals("const other = 1;\n", otherFixture.editor.document.text)
+            } finally { operationScope.cancel() }
+        } finally {
+            com.intellij.openapi.fileEditor.ex.FileEditorManagerEx.getInstanceEx(project).closeAllFiles()
+            project.service<BiomeServerService>().stopBiomeServer()
+            otherFixture.project.service<BiomeServerService>().stopBiomeServer()
+            otherFixture.tearDown()
+        }
+    }
+
+    fun testNewIndependentChildConfigRecoversUnownedEditor() {
+        val config = childFile.parent.toNioPath().resolve("biome.json")
+        val valid = Files.readString(config)
+        Files.delete(config)
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        myFixture.configureFromExistingVirtualFile(parentFile)
+        waitUntilFileOpenedByLspServer(project, parentFile, timeout = 20)
+        awaitFirstServerReadiness(parentFile)
+        myFixture.configureFromExistingVirtualFile(childFile)
+        waitUntilFileOpenedByLspServer(project, childFile, timeout = 20)
+        val editorManager = FileEditorManager.getInstance(project)
+        val editors = editorManager.getEditors(childFile).toList()
+        val manager = LspServerManager.getInstance(project)
+        val original = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).single()
+        Files.writeString(config, valid)
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        PlatformTestUtil.waitWithEventsDispatching("Independent config must recover the now-unowned child editor", {
+            manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).any {
+                it !== original && it.descriptor.roots.single() == childFile.parent &&
+                    it.initializeResult?.serverInfo?.version == "2.5.15"
+            }
+        }, 20)
+        events.awaitDiagnostics(childFile, "2.5.15")
+        formatExistingDocumentAndAssert(childFile, "const message = 'child';\n")
+        assertEquals(editors, editorManager.getEditors(childFile).toList())
+        val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        assertEquals(2, current.size)
+        assertEquals(setOf(childFile.parent), opened.filter { it.first in current && it.second == childFile }
+            .flatMap { it.first.descriptor.roots.toList() }.toSet())
+    }
+
+    private fun checkMalformedRestartRepair(
+        restart: Boolean = true,
+        parentFirst: Boolean = true,
+        dependencyRefresh: Boolean = false,
+        mode: ConfigurationMode = ConfigurationMode.AUTOMATIC,
+        established: Boolean = false,
+    ) {
+        if (!established) exercise(parentFirst)
+        orderOpenFiles(parentFirst)
+        val manager = LspServerManager.getInstance(project)
+        val editorManager = FileEditorManager.getInstance(project)
+        val editors = editorManager.getEditors(childFile).toList()
+        val original = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val config = childFile.parent.toNioPath().resolve("biome.json")
+        val valid = Files.readString(config)
+        Files.writeString(config, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        if (restart) {
+            if (dependencyRefresh) installParentUpgrade()
+            else project.service<BiomeServerService>().restartBiomeServer()
+            PlatformTestUtil.waitWithEventsDispatching("Restart did not complete while child config malformed", {
+                val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                current.size == 1 && current.none { it in original } &&
+                    current.single().initializeResult?.serverInfo?.version != null &&
+                    (!dependencyRefresh || current.single().initializeResult?.serverInfo?.version == "2.5.15")
+            }, 20)
+        }
+        val beforeRepair = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val freshDiagnostics = CopyOnWriteArrayList<Pair<LspServer, VirtualFile>>()
+        manager.addLspServerManagerListener(object : LspServerManagerListener {
+            override fun diagnosticsReceived(lspServer: LspServer, file: VirtualFile) {
+                freshDiagnostics.add(lspServer to file)
+            }
+        }, testRootDisposable, false)
+        BiomeSettings.getInstance(project).apply {
+            configurationMode = mode
+            if (mode == ConfigurationMode.MANUAL) {
+                // Blank Manual overrides now discover configs; this remains the explicit-override control.
+                configPath = parentFile.parent.path
+                executablePath = parentFile.parent.toNioPath().resolve("node_modules/.bin/biome").toString()
+            }
+        }
+        // Separate VFS events must not schedule duplicate replacements, including before startup completes.
+        repeat(5) {
+            Files.writeString(config, valid + " ".repeat(it))
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        }
+        if (mode != ConfigurationMode.AUTOMATIC) {
+            settleServers(beforeRepair)
+            assertEquals(editors, editorManager.getEditors(childFile).toList())
+            return
+        }
+        PlatformTestUtil.waitWithEventsDispatching("Repaired child config did not restore independent child ownership without reopening", {
+            val current = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            current.size == 2 && current.all { it.initializeResult?.serverInfo?.version != null } &&
+                current.any { it.descriptor.roots.toList() == listOf(childFile.parent) &&
+                it.initializeResult?.serverInfo?.version == "2.5.15" && it.descriptor.isSupportedFile(childFile) }
+        }, 20)
+        val repaired = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        assertEquals("Repair may not reopen editor", editors, editorManager.getEditors(childFile).toList())
+        assertEquals(if (dependencyRefresh) setOf("2.5.15") else setOf("2.5.14", "2.5.15"),
+            repaired.map { it.initializeResult?.serverInfo?.version }.toSet())
+        if (!restart) assertEquals("An established owner must retain its identity", original, repaired)
+        else {
+            for (file in listOf(parentFile, childFile)) {
+                PlatformTestUtil.waitWithEventsDispatching("Recovered workspace did not open and diagnose ${file.path}", {
+                    repaired.any { server -> opened.any { it.first === server && it.second == file } &&
+                        freshDiagnostics.any { it.first === server && it.second == file } }
+                }, 20)
+            }
+            assertEquals("Only the child server may open the repaired child", setOf(childFile.parent),
+                opened.filter { it.first in repaired && it.second == childFile }.flatMap { it.first.descriptor.roots.toList() }.toSet())
+        }
+        WriteCommandAction.runWriteCommandAction(project) {
+            FileDocumentManager.getInstance().getDocument(childFile)!!.setText("const message=\"child\";\n")
+            FileDocumentManager.getInstance().getDocument(parentFile)!!.setText("const message='parent';\n")
+        }
+        formatExistingDocumentAndAssert(childFile, "const message = 'child';\n")
+        formatExistingDocumentAndAssert(parentFile, "const message = \"parent\";\n")
+        repeat(3) {
+            Files.writeString(config, valid + " ".repeat(it + 6))
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        }
+        settleServers(repaired)
+        assertEquals(editors, editorManager.getEditors(childFile).toList())
+        assertEquals("Repair bursts must not create extra server instances",
+            (original + beforeRepair + repaired).toSet(), observedServers.toSet())
+    }
+
+    fun testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement() = checkUnavailableSibling(missing = false)
+
+    fun testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement() = checkUnavailableSibling(missing = true)
+
+    fun testCancellingNestedRecoveryStopsPendingVersionProbe() = checkUnavailableSibling(missing = false, cancelProbe = true)
+
+    private fun checkUnavailableSibling(missing: Boolean, cancelProbe: Boolean = false) {
+        val discoveryScope = if (cancelProbe) CoroutineScope(SupervisorJob() + Dispatchers.Default) else null
+        if (discoveryScope != null) {
+            project.replaceService(BiomeConfigDiscoveryService::class.java,
+                BiomeConfigDiscoveryService(project, discoveryScope), testRootDisposable)
+            com.intellij.openapi.util.Disposer.register(testRootDisposable) { discoveryScope.cancel() }
+        }
+        exercise(parentFirst = true)
+        val root = parentFile.parent
+        val siblingRoot = myFixture.tempDirFixture.findOrCreateDir("unrelated")
+        TestNpmPackageInstaller(myFixture).installForTest(javaClass, root, "unrelated")
+        myFixture.tempDirFixture.createFile("unrelated/biome.json", "{}")
+        val siblingFile = myFixture.tempDirFixture.createFile("unrelated/index.js", "const message='sibling';\n")
+        myFixture.configureFromExistingVirtualFile(siblingFile)
+        waitUntilFileOpenedByLspServer(project, siblingFile, timeout = 20)
+        events.awaitDiagnostics(siblingFile)
+        val editorManager = FileEditorManager.getInstance(project)
+        val siblingEditors = editorManager.getEditors(siblingFile).toList()
+        val childEditors = editorManager.getEditors(childFile).toList()
+        val manager = LspServerManager.getInstance(project)
+        fun current() = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
+        val childConfig = childFile.parent.toNioPath().resolve("biome.json")
+        val validConfig = Files.readString(childConfig)
+        Files.writeString(childConfig, "{broken")
+        VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+        val originals = current()
+        project.service<BiomeServerService>().restartBiomeServer()
+        PlatformTestUtil.waitWithEventsDispatching("Malformed child restart did not preserve the two valid roots", {
+            current().size == 2 && current().none { it in originals } &&
+                current().all { it.state == com.intellij.platform.lsp.api.LspServerState.Running }
+        }, 20)
+        val beforeRepair = current()
+        val sibling = beforeRepair.single { it.descriptor.roots.single() == siblingRoot }
+        events.awaitDiagnostics(siblingFile, sibling)
+        WriteCommandAction.runWriteCommandAction(project) {
+            FileDocumentManager.getInstance().getDocument(childFile)!!.setText("const message=\"child\";\n")
+        }
+        FileDocumentManager.getInstance().saveAllDocuments()
+        val executable = java.nio.file.Path.of((sibling.descriptor as BiomeLspServerDescriptor).executable)
+        val backup = executable.resolveSibling("biome-before-incomplete-install")
+        Files.move(executable, backup)
+        val probeMarker = siblingRoot.toNioPath().resolve("failed-probe")
+        if (!missing) Files.writeString(executable,
+            "require('node:fs').writeFileSync(${kotlinx.serialization.json.Json.encodeToString(probeMarker.toString())}, String(process.pid)); " +
+                if (cancelProbe) "setInterval(() => {}, 1000);\n" else "process.exit(42);\n")
+        try {
+            Files.writeString(childConfig, validConfig)
+            VfsUtil.markDirtyAndRefresh(false, true, true, childFile.parent)
+            if (!missing) PlatformTestUtil.waitWithEventsDispatching("Recovery never attempted the prospective sibling executable", {
+                Files.exists(probeMarker)
+            }, 10)
+            if (cancelProbe) {
+                val process = ProcessHandle.of(Files.readString(probeMarker).toLong()).orElseThrow()
+                assertTrue("The controlled version probe must be live before cancellation", process.isAlive)
+                discoveryScope!!.cancel()
+                PlatformTestUtil.waitWithEventsDispatching("Cancelling recovery did not terminate its pending version probe", {
+                    !process.isAlive
+                }, 3)
+            }
+            settleServers(beforeRepair)
+            formatExistingDocumentAndAssert(siblingFile, "const message = \"sibling\";\n")
+            assertEquals(siblingEditors, editorManager.getEditors(siblingFile).toList())
+            assertEquals(childEditors, editorManager.getEditors(childFile).toList())
+        } finally {
+            Files.deleteIfExists(executable)
+            Files.move(backup, executable)
+        }
+        if (cancelProbe) return
+        // The same bounded recovery request must retry; no second config event or reopen.
+        PlatformTestUtil.waitWithEventsDispatching("Recovery did not resume after the sibling installation completed", {
+            current().size == 3 && current().none { it in beforeRepair } &&
+                current().all { it.state == com.intellij.platform.lsp.api.LspServerState.Running }
+        }, 20)
+        val recovered = current()
+        events.awaitDiagnostics(childFile, recovered.single { it.descriptor.roots.single() == childFile.parent })
+        events.awaitDiagnostics(siblingFile, recovered.single { it.descriptor.roots.single() == siblingRoot })
+        formatExistingDocumentAndAssert(childFile, "const message = 'child';\n")
+        assertEquals(siblingEditors, editorManager.getEditors(siblingFile).toList())
+        assertEquals(childEditors, editorManager.getEditors(childFile).toList())
+    }
+
+    private fun settleServers(expected: List<LspServer>) {
+        val deadline = System.nanoTime() + 2_000_000_000L
+        PlatformTestUtil.waitWithEventsDispatching("Config events did not settle", {
+            assertEquals(expected, LspServerManager.getInstance(project)
+                .getServersForProvider(BiomeLspServerSupportProvider::class.java).toList())
+            System.nanoTime() >= deadline
+        }, 5)
+    }
+
+    private fun installParentUpgrade() {
+        val root = parentFile.parent.toNioPath()
+        val fixture = java.nio.file.Path.of(myFixture.testDataPath, "_package-locks-store", "_biomejs_biome_2_5_15")
+        for (name in listOf("package.json", "pnpm-lock.yaml")) {
+            Files.copy(fixture.resolve(name), root.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+        val output = Files.createTempFile("biome-nested-upgrade-", ".log")
+        try {
+            val installer = ProcessBuilder("corepack", "pnpm", "install", "--frozen-lockfile")
+                .directory(root.toFile()).redirectErrorStream(true).redirectOutput(output.toFile()).start()
+            try {
+                assertTrue("pnpm installation timed out", installer.waitFor(30, java.util.concurrent.TimeUnit.SECONDS))
+                assertEquals(Files.readString(output), 0, installer.exitValue())
+            } finally { if (installer.isAlive) installer.destroyForcibly() }
+        } finally { Files.deleteIfExists(output) }
+        VfsUtil.markDirtyAndRefresh(false, true, true, parentFile.parent)
+    }
+
     fun testParentThenChildServiceFormattingUsesChildServer() { exercise(parentFirst = true) }
     fun testChildThenParentServiceFormattingUsesChildServer() { exercise(parentFirst = false) }
     fun testParentThenChildIdeFormattingUsesChildServer() { exercise(parentFirst = true, throughIde = true) }
@@ -70,9 +421,7 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
         verifyPublicRestart(parentFirst = false)
     }
 
-    private fun verifyPublicRestart(parentFirst: Boolean) {
-        exercise(parentFirst)
-        val manager = LspServerManager.getInstance(project)
+    private fun orderOpenFiles(parentFirst: Boolean) {
         val editorManager = FileEditorManager.getInstance(project)
         // The SDK's test editor manager returns HashMap key order, not tab order.
         // Choose real fixture files until its public openFiles array has the desired order;
@@ -97,6 +446,13 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
             }
         }
         assertTrue("SDK test editor manager must expose the requested restart order", ordered)
+    }
+
+    private fun verifyPublicRestart(parentFirst: Boolean) {
+        exercise(parentFirst)
+        val manager = LspServerManager.getInstance(project)
+        val editorManager = FileEditorManager.getInstance(project)
+        orderOpenFiles(parentFirst)
         events.awaitDiagnostics(childFile)
         val original = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).toList()
         val childEditors = editorManager.getEditors(childFile).toList()

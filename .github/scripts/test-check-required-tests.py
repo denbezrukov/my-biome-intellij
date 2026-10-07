@@ -11,11 +11,28 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "BiomeConfigTest": (
+        "testClosingCancellationAfterExpectedReadFailureIsPreserved",
+        "testClosingFatalFailureAfterExpectedReadFailureIsPreserved",
+        "testCoroutineCancellationIdentityIsPreserved",
+        "testFatalFailureIdentityIsPreserved",
+        "testIoFailureClosingReturnsNullAndClosesStreamOnce",
+        "testIoFailureOpeningReturnsNull",
+        "testIoFailureReadingReturnsNullAndClosesStreamOnce",
+        "testMalformedInputReturnsNullAndClosesStreamOnce",
+        "testPlatformCancellationIdentityIsPreserved",
+        "testPlatformControlFlowIdentityIsPreserved",
+        "testRootAndExtendsSemanticsArePreserved",
+        "testUnexpectedRuntimeFailureIdentityIsPreserved",
+        "testValidJsonClosesStreamOnce",
+        "testValidJsoncClosesStreamOnce",
+    ),
     PACKAGE + "lsp.BiomeIdeRuntimeTest": (
         "testPinnedIdeRuntimeIsActuallyLoaded",
         "testMinimumCompiledPluginIsLoadedInRuntime",
     ),
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": (
+        "testDisabledPreferencesExecuteNoSaveWork",
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",
         "testIneligibleDocumentsAreSkipped",
@@ -48,6 +65,11 @@ REQUIRED_TESTS = {
         "testShellWrapperKeepsItsEnvironmentSetup",
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
+    ),
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": (
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
     ),
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": (
         "testCopiedConfigStartsForAlreadyOpenFile",
@@ -134,23 +156,77 @@ REQUIRED_TESTS = {
         "testSelectedJsonUsesDoubleQuotes",
         "testSelectedJsoncUsesSingleQuotes",
     ),
+    PACKAGE + "lsp.BiomeManualConfigRecoveryLspTest": (
+        "testDisabledModePreventsPendingManualRecovery",
+        "testDisposalCancelsPendingManualConfigRecovery",
+        "testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry",
+        "testExplicitOverrideInvalidatesQueuedManualRecovery",
+        "testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery",
+        "testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation",
+        "testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable",
+        "testManualRecoveryPreservesAnotherProjectServerAndFormatting",
+        "testMissingConfigCreationRecoversSameEditorWithSelectedExecutable",
+        "testPersistedWhitespaceOverrideRecoversAfterConfigCreation",
+        "testPersistedWhitespaceOverrideRecoversAfterConfigRepair",
+        "testUnrelatedConfigDoesNotRecoverManualEditor",
+        "testWhitespaceOverrideUsesSameEditorDiscovery",
+    ),
     PACKAGE + "lsp.BiomeManualConfigV1LspTest": (
         "testVersion1EmptyOverrideOmitsConfigArgument",
         "testVersion1LaunchPreservesSelectedJsonc",
         "testVersion1LegacyDirectoryLaunch",
     ),
     PACKAGE + "lsp.BiomeNestedRootsLspTest": (
+        "testClosedEditorInvalidatesQueuedNestedRecovery",
+        "testMalformedConfigInvalidatesQueuedNestedRecovery",
+        "testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension",
         "testChildFirstPublicRestartRestoresBothWorkspaces",
+        "testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace",
         "testChildThenParentIdeFormattingUsesChildServer",
         "testChildThenParentServiceFormattingUsesChildServer",
+        "testDisabledModeDoesNotRecoverNestedConfig",
         "testExplicitManualConfigRetainsProjectWideOwnership",
         "testMalformedEstablishedChildKeepsExclusiveOwnership",
         "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
+        "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testCancellingNestedRecoveryStopsPendingVersionProbe",
+        "testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement",
+        "testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement",
+        "testNestedRepairPreservesAnotherProjectServer",
+        "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",
         "testParentThenChildIdeFormattingUsesChildServer",
         "testParentThenChildServiceFormattingUsesChildServer",
+        "testRepairAfterDependencyRefreshRestoresIndependentWorkspace",
+        "testRepairAfterMalformedChildRestartRestoresIndependentWorkspace",
+        "testRepairWithoutRestartControlRestoresIndependentWorkspace",
+    ),
+    PACKAGE + "lsp.BiomeManualActionsTest": (
+        "testBothActionsApplyEditsAndUndo",
+        "testBothActionsApplyRealServerEditsAndUndo",
+        "testBothActionsDoNotPartiallyInvokeCommandBearingCodeActions",
+        "testBothActionsHideIneligibleContextsAndUseBgtUpdates",
+        "testBothActionsPreserveParentCancellation",
+        "testBothActionsPreservePlatformCancellation",
+        "testBothActionsPreserveRequestTimeoutCancellation",
+        "testBothActionsReportAppliedAndSkippedActionsAsPartial",
+        "testBothActionsReportCommandEntriesAsUnavailable",
+        "testBothActionsReportCommandOnlyCodeActionsAsUnavailable",
+        "testBothActionsReportDeclinedWritePreparation",
+        "testBothActionsReportDisabledActionsAsUnavailable",
+        "testBothActionsReportIdenticalTextEditAsUnchanged",
+        "testBothActionsReportInitializingServerWithoutRequesting",
+        "testBothActionsReportMissingServer",
+        "testBothActionsReportNoChanges",
+        "testBothActionsReportOwnTimeout",
+        "testBothActionsReportServerFailure",
+        "testBothActionsReportServerLossDuringRequest",
+        "testBothActionsReportStaleResponseAfterTyping",
+        "testBothActionsReportUnavailableCodeActions",
+        "testBothActionsReportUnchangedAndSkippedActionsAsUnavailable",
+        "testBothActionsTreatNullFromRunningServerAsUnchanged",
     ),
     PACKAGE + "lsp.BiomeSaveActionsTest": (
         "testCancellationBeforeWriteDoesNotMutate",
@@ -178,6 +254,10 @@ REQUIRED_TESTS = {
         "testTypingDiscardsStaleResponseAndRemainingFeatures",
         "testTypingDuringSaveCancelsOnlyThatDocument",
     ),
+    PACKAGE + "lsp.LegacyBiomeSharedDaemonLspTest": (
+        "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+        "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+    ),
     PACKAGE + "lsp.BiomeSharedDaemonLspTest": (
         "testNativeRestartPreservesSharedDaemonAndCleansUpProxies",
         "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",
@@ -193,6 +273,13 @@ REQUIRED_TESTS = {
     PACKAGE + "lsp.V1BiomeLanguageLspTest": (
         "testJavascriptStillFormatsWithV1",
         "testUnsupportedGritRemainsUnchangedWithV1",
+    ),
+    PACKAGE + "settings.BiomeDisabledPreferencesTest": (
+        "testActionsOnSaveResetAndApplyPreserveDisabledPreferences",
+        "testCancelDoesNotChangePreferencesOrMode",
+        "testDisableApplyReopenEnablePreservesPreferences",
+        "testDisabledSerializationPreservesPreferences",
+        "testInitiallyDisabledApplyPreservesPreferences",
     ),
     PACKAGE + "settings.BiomeManualConfigSettingsTest": (
         "testBlankOverrideRoundTrip",
@@ -261,7 +348,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("173 required tests across 23 classes", result.stdout)
+            self.assertIn("248 required tests across 29 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

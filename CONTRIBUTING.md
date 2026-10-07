@@ -48,12 +48,72 @@ python3 .github/scripts/run-required-tests.py --task test
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
-These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
+These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions.
+`BiomeManualActionsTest` invokes both manual actions and checks notification outcomes, actual edits and undo,
+unchanged edits, declined write access, disabled/unavailable/command-bearing results, mixed applied/skipped results,
+missing/initializing/stopped servers and valid null responses from running servers,
+stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 173 named
-tests across 23 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 248 named
+tests across 29 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
 same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
 reports even when Gradle fails.
+
+The required `BiomeConfigTest` inventory exercises the real loader:
+
+- `testValidJsonClosesStreamOnce`, `testValidJsoncClosesStreamOnce`, `testRootAndExtendsSemanticsArePreserved`
+- `testMalformedInputReturnsNullAndClosesStreamOnce`, `testIoFailureOpeningReturnsNull`, `testIoFailureReadingReturnsNullAndClosesStreamOnce`, `testIoFailureClosingReturnsNullAndClosesStreamOnce`
+- `testCoroutineCancellationIdentityIsPreserved`, `testPlatformCancellationIdentityIsPreserved`, `testPlatformControlFlowIdentityIsPreserved`
+- `testFatalFailureIdentityIsPreserved`, `testUnexpectedRuntimeFailureIdentityIsPreserved`
+- `testClosingCancellationAfterExpectedReadFailureIsPreserved`, `testClosingFatalFailureAfterExpectedReadFailureIsPreserved`
+
+Disabled preference regressions: `BiomeDisabledPreferencesTest.testDisableApplyReopenEnablePreservesPreferences`, `testInitiallyDisabledApplyPreservesPreferences`, `testDisabledSerializationPreservesPreferences`, `testCancelDoesNotChangePreferencesOrMode`, `testActionsOnSaveResetAndApplyPreserveDisabledPreferences`, and `BiomeCheckOnSaveActionTest.testDisabledPreferencesExecuteNoSaveWork`. These cover settings Apply/reopen, XML persistence, Cancel, Actions on Save reset/toggling, and execution suppression.
+
+The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressions:
+
+- `testChildFirstRepairAfterMalformedRestartRestoresIndependentWorkspace`
+- `testClosedEditorInvalidatesQueuedNestedRecovery`
+- `testMalformedConfigInvalidatesQueuedNestedRecovery`
+- `testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension`
+- `testDisabledModeDoesNotRecoverNestedConfig`
+- `testManualModeDoesNotRecoverNestedConfig`
+- `testCancellingNestedRecoveryStopsPendingVersionProbe`
+- `testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement`
+- `testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement`
+- `testNestedRepairPreservesAnotherProjectServer`
+- `testNewIndependentChildConfigRecoversUnownedEditor`
+- `testRepairAfterDependencyRefreshRestoresIndependentWorkspace`
+- `testRepairAfterMalformedChildRestartRestoresIndependentWorkspace`
+- `testRepairWithoutRestartControlRestoresIndependentWorkspace`
+
+They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
+config-event bursts, and project/mode isolation. Before a recovery restart, every active workspace and prospective
+executable must be reconstructable. Broken or missing replacements retain live servers while a bounded recovery
+request retries; the regression restores the executable without another config event or editor reopen. Cancellation
+also terminates a live preflight process without stopping the working servers. Config removal and reparenting remain separate lifecycle work.
+
+The manual executable recovery gate includes these named `BiomeManualConfigRecoveryLspTest` regressions:
+
+- `testMissingConfigCreationRecoversSameEditorWithSelectedExecutable`
+- `testMalformedConfigRepairRecoversSameEditorWithSelectedExecutable`
+- `testWhitespaceOverrideUsesSameEditorDiscovery`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigCreation`
+- `testPersistedWhitespaceOverrideRecoversAfterConfigRepair`
+- `testExplicitOverrideKeepsSelectedConfigAfterUnrelatedConfigCreation`
+- `testExplicitOverrideAddedAfterOpenPreventsDiscoveryRecovery`
+- `testDisabledModePreventsPendingManualRecovery`
+- `testUnrelatedConfigDoesNotRecoverManualEditor`
+- `testManualRecoveryPreservesAnotherProjectServerAndFormatting`
+- `testDisposalCancelsPendingManualConfigRecovery`
+- `testExplicitOverrideInvalidatesQueuedManualRecovery`
+- `testExecutableChangeInvalidatesQueuedManualRecoveryBeforeRetry`
+
+They retain the open editor, selected executable and real server version, and verify formatting with a different
+project dependency installed. XML-loaded whitespace overrides from older settings retain the same discovery behavior.
+Nonblank overrides retain exact configuration selection; the existing nested Manual
+negative control uses an explicit override. Mode changes, project disposal and unrelated config/project isolation
+remain covered. Controlled-dispatcher races also require changes to Manual config/executable selections to discard
+stale discovery requests before an EDT restart, then adopt the current executable on a fresh read.
 
 The launcher inventory includes `testNodeReaderFinishesAfterProxyExitWithInheritedPipes` and
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`. Both require the native Node handler to finish while
@@ -64,7 +124,19 @@ pins the unchanged secondary root to 2.5.14. This isolates root ownership, execu
 and configuration preservation from an independently reproduced Biome 2.2.3 initialization bug
 that can lose an early document open. The replacement still must deliver diagnostics and format
 correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
-in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
+in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation. When selecting
+an already-open file after restart, use `openFileInEditor` and retain its editor, document, and
+modification stamp: fixture reconfiguration rewrites the file and can invalidate pending diagnostics.
+
+The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
+
+The shared-daemon selector runs both the 2.5.15 restart/recovery fixtures and pinned 2.2.3
+Node/native stop-ownership controls. The legacy cases require two actual projects, exact
+formatting, an unchanged second server and daemon, first-client proxy cleanup, and final-client
+daemon shutdown. They do not reopen documents after stopping or claim to solve 2.2.3's
+upstream first-open registration race. The 2.5.15 cases retain full replacement diagnostics
+and formatting assertions.
+
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
@@ -130,7 +202,7 @@ input runs every gate and uploads evidence. Passing `true` additionally uploads 
 override accepts the version prepared by the caller. Outputs are `version`, `artifact-name`, and `sha256`; this workflow
 never publishes to a registry or creates a release.
 
-The release pipeline has a separate Python regression inventory (it does not change the JVM inventory above):
+The release pipeline has a separate Python regression inventory (it does not change the JVM inventory):
 
 ```shell
 python3 -m pip install PyYAML==6.0.3
@@ -141,7 +213,7 @@ python3 .github/scripts/test-publish-draft.py
 Its 15 tests cover stable/nightly version selection, the actual workflow validation command, nested JAR descriptor
 identity and minimum build, filename/version/SHA256 agreement, damaged or missing archives and descriptors, unsafe
 versions, dry-run authorization, and missing/failed/skipped/cancelled gate outcomes. The `Publish` workflow runs this
-inventory before selecting a version or invoking the compatibility gate. The separate 15-test draft-publication
+inventory before selecting a version or invoking the compatibility gate. The separate 16-test draft-publication
 inventory mocks the GitHub API, including existing published/draft releases, lightweight/annotated tags, pagination,
 API failures, tag/release collisions, and exact ZIP upload bytes. These tests make no network requests or release writes.
 

@@ -52,6 +52,23 @@ class BiomeCheckOnSaveActionTest : BasePlatformTestCase() {
         assertEquals(0, calls)
     }
 
+    fun testDisabledPreferencesExecuteNoSaveWork() = runAction {
+        val settings = BiomeSettings.getInstance(project)
+        settings.enableLspFormat = true
+        settings.formatOnSave = true
+        settings.applySafeFixesOnSave = true
+        settings.sortImportOnSave = true
+        settings.configurationMode = ConfigurationMode.DISABLED
+        val document = myFixture.configureByText("disabled.js", "let x=1").viewProvider.document!!
+        val action = BiomeCheckOnSaveAction { _, _, _ -> fail("Disabled integration must execute no Biome work") }
+        assertFalse(action.isEnabledForProject(project))
+        action.updateDocument(project, document)
+        assertEquals("let x=1", document.text)
+        assertTrue(settings.state.formatOnSave)
+        assertTrue(settings.state.applySafeFixesOnSave)
+        assertTrue(settings.state.sortImportOnSave)
+    }
+
     fun testFeatureSnapshotIsStable() = runAction {
         val settings = BiomeSettings.getInstance(project)
         settings.configurationMode = ConfigurationMode.MANUAL

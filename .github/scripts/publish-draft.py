@@ -100,8 +100,10 @@ def create_draft(request, repository, sha, version, archive, sha256, nightly):
     reserved = request('POST', root + '/git/refs', {'ref': 'refs/tags/' + tag, 'sha': sha})
     require_commit_tag(reserved, sha)
     require_commit_tag(request('GET', f'{root}/git/ref/tags/{tag}'), sha)
+    # The existing tag already pins sha. Supplying the unused target_commitish
+    # can require Workflows write permission, which GITHUB_TOKEN cannot receive.
     release = request('POST', root + '/releases', {
-        'tag_name': tag, 'target_commitish': sha, 'name': tag,
+        'tag_name': tag, 'name': tag,
         'draft': True, 'prerelease': nightly, 'generate_release_notes': True,
     })
     release_id = require_draft(release, tag)

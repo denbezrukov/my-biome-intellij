@@ -5,7 +5,6 @@ import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
-import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.github.biomejs.intellijbiome.services.BiomeDependencyRefreshService
 import com.intellij.openapi.components.service
 import com.intellij.execution.configurations.GeneralCommandLine
@@ -53,7 +52,7 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val projectRoots = project.getBaseDirectories()
         if (projectRoots.none { VfsUtil.isUnder(file, setOf(it)) }) return
         // Discovery must observe a later config creation even when no root exists yet.
-        if (settings.configurationMode == ConfigurationMode.AUTOMATIC) {
+        if (settings.usesConfigDiscovery()) {
             project.service<BiomeConfigDiscoveryService>()
         }
         fun findRoot(candidate: VirtualFile): VirtualFile? {
