@@ -234,7 +234,7 @@ class BiomeStartupProbeTest : BasePlatformTestCase() {
 
     fun testProcessExitDuringStateReadIsNotReportedAsAnOrphan() {
         // This interleaving is specific to Linux's disappearing /proc process files.
-        if (!Files.isDirectory(Path.of("/proc/self"))) return
+        assertTrue("This required process-state regression needs Linux procfs", Files.isDirectory(Path.of("/proc/self")))
         val started = Files.createTempFile("biome-probe-state-read", ".pid")
         Files.delete(started)
         val handler = process("hang", started.toString())
