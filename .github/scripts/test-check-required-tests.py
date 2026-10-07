@@ -109,6 +109,13 @@ REQUIRED_TESTS = {
         "testTemporarilyMissingInterpreterDoesNotLoseRefreshSubscription",
         "testUpgradeWhileAnotherRootInitializesIsRetriedWhenItRuns",
     ),
+    PACKAGE + "lsp.BiomeDiagnosticsTest": (
+        "testAbsentCodeRendersMessageAndTooltip",
+        "testIntegerAndZeroCodesRenderMessageAndTooltip",
+        "testMultilineAndHtmlSensitiveTextIsEscapedOnlyInTooltip",
+        "testRuntimeMessageRepresentationsKeepTheirText",
+        "testStringCodeRendersMessageAndTooltip",
+    ),
     PACKAGE + "lsp.BiomeLanguageLspTest": (
         "testArbitraryXmlPreservesNativeIdeFormatting",
         "testDefaultGritUsesGritIdentityAndFormats",
@@ -192,6 +199,7 @@ REQUIRED_TESTS = {
     ),
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": (
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+        "testDiagnosticQuickFixRenamesUnusedParameter",
     ),
     PACKAGE + "lsp.V1BiomeLanguageLspTest": (
         "testJavascriptStillFormatsWithV1",
@@ -270,7 +278,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("182 required tests across 23 classes", result.stdout)
+            self.assertIn("188 required tests across 24 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
