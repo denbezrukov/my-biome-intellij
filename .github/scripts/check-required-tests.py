@@ -67,6 +67,11 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     },
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": {
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
+    },
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": {
         "testCopiedConfigStartsForAlreadyOpenFile",
         "testDeleteAndRecreateConfigStartsOnce",
@@ -187,6 +192,9 @@ REQUIRED_TESTS = {
         "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testCancellingNestedRecoveryStopsPendingVersionProbe",
+        "testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement",
+        "testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement",
         "testNestedRepairPreservesAnotherProjectServer",
         "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",

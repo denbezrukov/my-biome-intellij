@@ -53,8 +53,8 @@ These suites exercise settings persistence, both Biome CLI versions, and real pl
 unchanged edits, disabled/unavailable/command-only results, mixed applied/skipped results, missing/initializing servers,
 stale responses, failure, timeout, cancellation, and presentation availability. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 235 named
-tests across 27 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 241 named
+tests across 28 classes to execute without failures or skips. `run-required-tests.py` selects the classes from that
 same inventory, so adding a required class cannot leave it unselected in CI. The CI gate runs the guard and uploads
 reports even when Gradle fails.
 
@@ -76,6 +76,9 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 - `testQueuedDiscoveryBarrierAcceptsReadWithoutSuspension`
 - `testDisabledModeDoesNotRecoverNestedConfig`
 - `testManualModeDoesNotRecoverNestedConfig`
+- `testCancellingNestedRecoveryStopsPendingVersionProbe`
+- `testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement`
+- `testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement`
 - `testNestedRepairPreservesAnotherProjectServer`
 - `testNewIndependentChildConfigRecoversUnownedEditor`
 - `testRepairAfterDependencyRefreshRestoresIndependentWorkspace`
@@ -83,7 +86,10 @@ The nested recovery gate includes these named `BiomeNestedRootsLspTest` regressi
 - `testRepairWithoutRestartControlRestoresIndependentWorkspace`
 
 They check actual SDK discovery order, retained editor identity, exclusive child ownership, real dependency refresh,
-config-event bursts, and project/mode isolation. Config removal and reparenting remain separate lifecycle work.
+config-event bursts, and project/mode isolation. Before a recovery restart, every active workspace and prospective
+executable must be reconstructable. Broken or missing replacements retain live servers while a bounded recovery
+request retries; the regression restores the executable without another config event or editor reopen. Cancellation
+also terminates a live preflight process without stopping the working servers. Config removal and reparenting remain separate lifecycle work.
 
 The manual executable recovery gate includes these named `BiomeManualConfigRecoveryLspTest` regressions:
 
@@ -120,6 +126,8 @@ correctly without a post-restart reopen or diagnostic retry. Other legacy and v1
 in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation. When selecting
 an already-open file after restart, use `openFileInEditor` and retain its editor, document, and
 modification stamp: fixture reconfiguration rewrites the file and can invalidate pending diagnostics.
+
+The discovery-routing suite also checks that unrelated initialization cannot block an independent config recovery, excluded open files cannot restart working roots, and a content-root exclusion invalidates an already queued recovery request. Its protocol peer controls the real SDK initialization boundary.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 

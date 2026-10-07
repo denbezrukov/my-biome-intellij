@@ -66,6 +66,11 @@ REQUIRED_TESTS = {
         "testVersion1NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
         "testVersion2NpmLauncherUsesConfiguredInterpreterWithoutPathNode",
     ),
+    PACKAGE + "lsp.BiomeConfigDiscoveryRoutingTest": (
+        "testExcludedOpenFileDoesNotRestartWorkingRootOnConfigEvents",
+        "testExcludingOpenFileInvalidatesQueuedRecovery",
+        "testIndependentRecoveryDoesNotWaitForUnrelatedInitialization",
+    ),
     PACKAGE + "lsp.BiomeConfigRecoveryLspTest": (
         "testCopiedConfigStartsForAlreadyOpenFile",
         "testDeleteAndRecreateConfigStartsOnce",
@@ -186,6 +191,9 @@ REQUIRED_TESTS = {
         "testManualModeDoesNotRecoverNestedConfig",
         "testMissingExistingRootRetainsNonRootChildOwnership",
         "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testCancellingNestedRecoveryStopsPendingVersionProbe",
+        "testNestedRecoveryPreservesWorkingSiblingWithBrokenReplacement",
+        "testNestedRecoveryPreservesWorkingSiblingWithMissingReplacement",
         "testNestedRepairPreservesAnotherProjectServer",
         "testNewIndependentChildConfigRecoversUnownedEditor",
         "testParentFirstPublicRestartRestoresBothWorkspaces",
@@ -331,7 +339,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("235 required tests across 27 classes", result.stdout)
+            self.assertIn("241 required tests across 28 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
