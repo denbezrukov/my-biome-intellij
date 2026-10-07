@@ -5,6 +5,8 @@ import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
+import com.github.biomejs.intellijbiome.services.BiomeDependencyRefreshService
+import com.intellij.openapi.components.service
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.OSProcessHandler
@@ -61,7 +63,8 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
 
         // Select the executable here; the platform probes it during pooled server startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
-        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath))
+        project.service<BiomeDependencyRefreshService>()
+        serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath, file.parent))
     }
 
     override fun createLspServerWidgetItem(lspServer: LspServer,
@@ -69,12 +72,15 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         LspServerWidgetItem(lspServer, currentFile, BiomeIcons.BiomeIcon, BiomeConfigurable::class.java)
 }
 
-private class BiomeLspServerDescriptor(
+internal class BiomeLspServerDescriptor(
     project: Project,
     root: VirtualFile,
-    executable: String,
+    val executable: String,
     private val configPath: String?,
+    val packageContext: VirtualFile,
 ) : LspServerDescriptor(project, "Biome", root) {
+    // Preserve package discovery when the startup file is closed, renamed or deleted.
+    val packageContextPath = packageContext.path
     private val executionContext = BiomeTargetRunBuilder(project)
     private val probeRun = executionContext.getBuilder(executable, root.path)
         .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
