@@ -12,6 +12,22 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "lsp.BiomeConfigRecoveryLspTest": {
+        "testCopiedConfigStartsForAlreadyOpenFile",
+        "testDeleteAndRecreateConfigStartsOnce",
+        "testDisabledPluginDoesNotStartAfterConfigCreation",
+        "testExistingServerObservesConfigEditWithoutRestart",
+        "testExistingValidConfigStartsAndFormats",
+        "testExternalConfigCreationStartsForAlreadyOpenFile",
+        "testMalformedConfigRepairStartsForAlreadyOpenFile",
+        "testProjectDisposalPreventsLateServerStartAfterConfigEvent",
+        "testRecoveryPreservesAnotherProjectServer",
+        "testRecoveryPreservesUnrelatedRootServer",
+        "testRenameConfigStartsForAlreadyOpenFile",
+        "testReopenAfterExternalConfigCreationIsRecoveryControl",
+        "testStillMalformedConfigDoesNotStart",
+        "testUnsupportedFileDoesNotStartAfterConfigCreation",
+    },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
