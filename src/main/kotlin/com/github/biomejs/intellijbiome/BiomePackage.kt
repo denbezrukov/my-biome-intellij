@@ -1,6 +1,8 @@
 package com.github.biomejs.intellijbiome
 
 import com.github.biomejs.intellijbiome.extensions.runProcessFuture
+import com.github.biomejs.intellijbiome.extensions.ProcessResult
+import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
@@ -8,7 +10,20 @@ import com.intellij.javascript.nodejs.util.NodePackage
 import com.intellij.javascript.nodejs.util.NodePackageDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.execution.process.OSProcessHandler
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import com.intellij.execution.ExecutionException
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.CompletableFuture
+import kotlin.coroutines.coroutineContext
 import java.nio.file.Paths
 
 
@@ -51,14 +66,48 @@ class BiomePackage(private val project: Project) {
         }
     }
 
-    suspend fun versionNumber(): String? {
-        val settings = BiomeSettings.getInstance(project)
-        val configurationMode = settings.configurationMode
-        return when (configurationMode) {
-            ConfigurationMode.DISABLED -> null
-            ConfigurationMode.AUTOMATIC -> getPackage(null)?.version?.toString()
-            ConfigurationMode.MANUAL -> getBinaryVersion(settings.executablePath)
+    /** Collects the version of precisely the executable and target selected by the caller. */
+    suspend fun versionNumber(targetRun: BiomeTargetRun): String {
+        var handler: OSProcessHandler? = null
+        var future: CompletableFuture<ProcessResult>? = null
+        try {
+            checkProbeCancellation()
+            // SDK target preparation is synchronous; the deadline bounds result collection.
+            val process = targetRun.startProcess()
+            handler = process
+            val collection = runProcessFuture(process)
+            future = collection
+            val result = withTimeoutOrNull(5_000) {
+                while (!collection.isDone) {
+                    checkProbeCancellation()
+                    delay(25)
+                }
+                checkProbeCancellation()
+                collection.await()
+            } ?: throw ExecutionException("Biome version probe exceeded 5000 ms")
+            val output = result.processOutput
+            if (output.exitCode != 0) {
+                throw ExecutionException("Biome version probe exited with code ${output.exitCode}: ${output.stderr}")
+            }
+            return versionRegex.find(output.stdout)?.value
+                ?: throw ExecutionException("Biome executable returned an invalid version")
+        } finally {
+            // Cleanup must survive parent cancellation, but never wait indefinitely for a child.
+            withContext(NonCancellable + Dispatchers.IO) {
+                val process = handler
+                if (process != null && process.process.isAlive) {
+                    future?.cancel(true)
+                    terminateProbeProcess(process)
+                    process.process.waitFor(1_000, TimeUnit.MILLISECONDS)
+                }
+            }
         }
+    }
+
+    private suspend fun checkProbeCancellation() {
+        coroutineContext.ensureActive()
+        ProgressManager.checkCanceled()
+        if (project.isDisposed) throw ProcessCanceledException()
     }
 
     fun binaryPath(
@@ -86,27 +135,6 @@ class BiomePackage(private val project: Project) {
         return null
     }
 
-
-    private suspend fun getBinaryVersion(binaryPath: String?): String? {
-        if (binaryPath.isNullOrEmpty()) {
-            return null
-        }
-
-        val processHandler =
-            BiomeTargetRunBuilder(project)
-                .getBuilder(binaryPath)
-                .addParameters(listOf(ProcessCommandParameter.Value("--version")))
-                .build()
-                .startProcess()
-
-        return runCatching {
-            val result = runProcessFuture(processHandler).await()
-            val processOutput = result.processOutput
-            val stdout = processOutput.stdout
-            val matchResult = versionRegex.find(stdout)
-            return matchResult?.value
-        }.getOrNull()
-    }
 
     companion object {
         const val configName = "biome"
