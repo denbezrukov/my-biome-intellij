@@ -12,6 +12,31 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "lsp.BiomeDependencyRefreshLifecycleTest": {
+        "testChangedPrereleaseIsAdoptedOnce",
+        "testClosedFailedRootDoesNotBlockHealthyRootUpgrade",
+        "testInterpreterChangeDuringProbePreservesWorkingServer",
+        "testReopenedIdleRootIsVerifiedBeforeProjectRestart",
+        "testSupersedingInstallEventInvalidatesSuccessfulOlderProbeImmediately",
+        "testUnchangedPrereleaseDoesNotRestart",
+    },
+    PACKAGE + "lsp.BiomeDependencyUpgradeLspTest": {
+        "testClosedRootDoesNotBlockRemainingRootsUpgrade",
+        "testDependencyEventBurstAdoptsVersionBOnce",
+        "testDependencyRenameAndRecreationPreservesOldServerUntilValid",
+        "testDependencyUpgradePreservesAnotherProjectsServer",
+        "testDisabledModeDoesNotRefreshAfterDependencyUpgrade",
+        "testExistingRestartAdoptsInstalledVersionB",
+        "testExistingRestartKeepsAnotherProjectResponsiveWithoutAnInstall",
+        "testFailedReplacementKeepsWorkingServerThenRecovers",
+        "testManualModeDoesNotRefreshAfterDependencyUpgrade",
+        "testParentMonorepoLockAdoptsReplacementWithoutPackageRefresh",
+        "testProjectDisposalCancelsPendingDependencyRefresh",
+        "testProjectRestartRetainsSecondRootsOwnBinaryAndConfiguration",
+        "testRealInstallAdoptsVersionBWithoutRestart",
+        "testTemporarilyMissingInterpreterDoesNotLoseRefreshSubscription",
+        "testUpgradeWhileAnotherRootInitializesIsRetriedWhenItRuns",
+    },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",

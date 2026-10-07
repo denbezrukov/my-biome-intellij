@@ -11,6 +11,31 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
+    PACKAGE + "lsp.BiomeDependencyRefreshLifecycleTest": (
+        "testChangedPrereleaseIsAdoptedOnce",
+        "testClosedFailedRootDoesNotBlockHealthyRootUpgrade",
+        "testInterpreterChangeDuringProbePreservesWorkingServer",
+        "testReopenedIdleRootIsVerifiedBeforeProjectRestart",
+        "testSupersedingInstallEventInvalidatesSuccessfulOlderProbeImmediately",
+        "testUnchangedPrereleaseDoesNotRestart",
+    ),
+    PACKAGE + "lsp.BiomeDependencyUpgradeLspTest": (
+        "testClosedRootDoesNotBlockRemainingRootsUpgrade",
+        "testDependencyEventBurstAdoptsVersionBOnce",
+        "testDependencyRenameAndRecreationPreservesOldServerUntilValid",
+        "testDependencyUpgradePreservesAnotherProjectsServer",
+        "testDisabledModeDoesNotRefreshAfterDependencyUpgrade",
+        "testExistingRestartAdoptsInstalledVersionB",
+        "testExistingRestartKeepsAnotherProjectResponsiveWithoutAnInstall",
+        "testFailedReplacementKeepsWorkingServerThenRecovers",
+        "testManualModeDoesNotRefreshAfterDependencyUpgrade",
+        "testParentMonorepoLockAdoptsReplacementWithoutPackageRefresh",
+        "testProjectDisposalCancelsPendingDependencyRefresh",
+        "testProjectRestartRetainsSecondRootsOwnBinaryAndConfiguration",
+        "testRealInstallAdoptsVersionBWithoutRestart",
+        "testTemporarilyMissingInterpreterDoesNotLoseRefreshSubscription",
+        "testUpgradeWhileAnotherRootInitializesIsRetriedWhenItRuns",
+    ),
     PACKAGE + "lsp.BiomeManualConfigCliTest": (
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
@@ -98,7 +123,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("40 required tests across 8 classes", result.stdout)
+            self.assertIn("61 required tests across 10 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
