@@ -210,6 +210,7 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
         formatAndAssert("const other = \"other\";\n")
         WriteCommandAction.runWriteCommandAction(project) { myFixture.editor.document.setText("const other='other';\n") }
         FileDocumentManager.getInstance().saveDocument(myFixture.editor.document)
+        val otherEditor = myFixture.editor
         val original = establishVersionA()
         if (closeOther) FileEditorManager.getInstance(project).closeFile(otherFile)
         installVersionB()
@@ -222,7 +223,14 @@ class BiomeDependencyUpgradeLspTest : BiomeLspFixtureTestCase() {
         assertNotSame("The public API intentionally restarts every Biome root in this project", oldOther, newOther)
         assertEquals("2.5.14", newOther.initializeResult?.serverInfo?.version)
         assertTrue("Second root must retain its own dependency", (newOther.descriptor as BiomeLspServerDescriptor).executable.startsWith(otherRoot.path + "/node_modules/"))
-        myFixture.configureFromExistingVirtualFile(otherFile)
+        assertFalse("The secondary editor must stay open across restart", otherEditor.isDisposed)
+        assertTrue(FileEditorManager.getInstance(project).isFileOpen(otherFile))
+        val beforeSelection = otherEditor.document.modificationStamp
+        // Reconfiguring the fixture rewrites the file and makes in-flight diagnostics stale.
+        myFixture.openFileInEditor(otherFile)
+        assertSame("Selecting the secondary file must retain its editor", otherEditor, myFixture.editor)
+        assertSame("Selecting the secondary file must retain its document", otherEditor.document, myFixture.editor.document)
+        assertEquals("Selecting the secondary editor must not rewrite its document", beforeSelection, myFixture.editor.document.modificationStamp)
         waitUntilFileOpenedByLspServer(project, otherFile, timeout = 15)
         events.awaitDiagnostics(otherFile, newOther)
         formatAndAssert("const other = \"other\";\n")
