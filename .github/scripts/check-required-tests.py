@@ -42,6 +42,17 @@ REQUIRED_TESTS = {
         "testVersion1LaunchPreservesSelectedJsonc",
         "testVersion1LegacyDirectoryLaunch",
     },
+    PACKAGE + "lsp.BiomeNestedRootsLspTest": {
+        "testChildThenParentIdeFormattingUsesChildServer",
+        "testChildThenParentServiceFormattingUsesChildServer",
+        "testExplicitManualConfigRetainsProjectWideOwnership",
+        "testMalformedEstablishedChildKeepsExclusiveOwnership",
+        "testMalformedExistingRootDoesNotPermanentlyRejectNewFile",
+        "testMissingExistingRootRetainsNonRootChildOwnership",
+        "testNestedNonRootConfigRemainsInParentWorkspace",
+        "testParentThenChildIdeFormattingUsesChildServer",
+        "testParentThenChildServiceFormattingUsesChildServer",
+    },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
     },

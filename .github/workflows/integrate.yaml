@@ -39,6 +39,7 @@ jobs:
           --tests '*BiomeManualConfigCliTest'
           --tests '*BiomeManualConfigLspTest'
           --tests '*BiomeManualConfigV1LspTest'
+          --tests '*BiomeNestedRootsLspTest'
           --tests '*UnusedFunctionHighlightingTest'
           --tests '*BiomeManualConfigSettingsTest'
           --tests '*BiomeStartupLspTest'
