@@ -20,6 +20,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.undo.UndoManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.platform.lsp.api.LspServer
@@ -225,7 +226,19 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
     }
 
     fun testBothActionsApplyRealServerEditsAndUndo() {
+        // fileOpened acknowledges SDK dispatch, not Biome's registration of the document.
+        // Biome 2.2.3 can miss the first didOpen while loading its workspace configuration.
+        val events = RuntimeGateEvents(project, testRootDisposable)
         openFile()
+        val file = myFixture.file.virtualFile
+        try {
+            events.awaitDiagnostics(file, timeout = 5)
+        } catch (_: AssertionError) {
+            FileEditorManager.getInstance(project).closeFile(file)
+            myFixture.configureFromExistingVirtualFile(file)
+            waitUntilFileOpenedByLspServer(project, file, timeout = 20)
+            events.awaitDiagnostics(file)
+        }
         val cases = listOf(
             Triple(BiomeApplySafeFixesAction(), "let value=1;console.log(value);\n", "const value = 1;\nconsole.log(value);\n"),
             Triple(BiomeSortImportAction(), "import { z } from \"./z\";\nimport { a } from \"./a\";\nconsole.log(a,z);\n",
