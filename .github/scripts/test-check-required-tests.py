@@ -11,32 +11,68 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
-    PACKAGE + "settings.BiomeManualConfigSettingsTest": (
-        "testSelectedFilesRoundTrip",
-        "testLegacyDirectoryRoundTrip",
-        "testConfigPathValidation",
-        "testBlankOverrideRoundTrip",
-        "testPathWithSpaces",
-        "testSelectedConfigSurvivesApplyAndReopen",
-        "testInvalidManualInputCannotApply",
-        "testHiddenManualInputDoesNotBlockModeChange",
+    PACKAGE + "actions.BiomeCheckOnSaveActionTest": (
+        "testFeatureSnapshotIsStable",
+        "testFileSpecificFailureFeedback",
+        "testIneligibleDocumentsAreSkipped",
+        "testPlatformCancellationPropagates",
     ),
-    PACKAGE + "lsp.BiomeManualConfigLspTest": (
-        "testSelectedJsoncUsesSingleQuotes",
-        "testSelectedJsonUsesDoubleQuotes",
-        "testLegacyDirectoryUsesDoubleQuotes",
-    ),
-    PACKAGE + "lsp.BiomeManualConfigV1LspTest": (
-        "testVersion1LaunchPreservesSelectedJsonc",
-        "testVersion1LegacyDirectoryLaunch",
-        "testVersion1EmptyOverrideOmitsConfigArgument",
+    PACKAGE + "actions.BiomeSaveOperationTest": (
+        "testCancellationExceptionFromOperationIsPreserved",
+        "testCompletionAndFailure",
+        "testFeatureStagesShareOneBudget",
+        "testOuterTimeoutPropagates",
+        "testOwnTimeoutIsRecoverable",
+        "testParentCancellationPropagates",
+        "testPlatformCancellationPropagates",
+        "testPlatformControlFlowPropagates",
     ),
     PACKAGE + "lsp.BiomeManualConfigCliTest": (
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
     ),
+    PACKAGE + "lsp.BiomeManualConfigLspTest": (
+        "testLegacyDirectoryUsesDoubleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testSelectedJsoncUsesSingleQuotes",
+    ),
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": (
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+    ),
+    PACKAGE + "lsp.BiomeSaveActionsTest": (
+        "testCancellationBeforeWriteDoesNotMutate",
+        "testCancellationWhileWriteIsQueuedDoesNotMutate",
+        "testCrLfOnlyEditPersists",
+        "testEnabledFeaturesRunInOrderAndPersist",
+        "testIdeFormatOnSaveOrderingAndUndo",
+        "testLfOnlyEditPersists",
+        "testMissingServerIsNoOp",
+        "testOrganizeImportsPersistsRealServerEdits",
+        "testPartialSuccessPersistsAfterTimeout",
+        "testPlatformCancellationPropagates",
+        "testProjectDisposalCancelsPendingSave",
+        "testSaveAllContinuesAfterFileFailure",
+        "testSaveAllContinuesAfterFileTimeout",
+        "testSavePreservesCrLfBytes",
+        "testSavePreservesLfBytes",
+        "testSeparatorPersistsWhenEarlierEditsReturnToSavedText",
+        "testTypingDiscardsStaleResponseAndRemainingFeatures",
+        "testTypingDuringSaveCancelsOnlyThatDocument",
+    ),
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": (
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    ),
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": (
+        "testBlankOverrideRoundTrip",
+        "testConfigPathValidation",
+        "testHiddenManualInputDoesNotBlockModeChange",
+        "testInvalidManualInputCannotApply",
+        "testLegacyDirectoryRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testSelectedFilesRoundTrip",
     ),
 }
 GUARD = Path(__file__).with_name("check-required-tests.py")
@@ -69,7 +105,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("17 required tests across 5 classes", result.stdout)
+            self.assertIn("47 required tests across 8 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)

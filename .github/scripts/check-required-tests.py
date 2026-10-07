@@ -12,32 +12,68 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = "com.github.biomejs.intellijbiome."
 REQUIRED_TESTS = {
-    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
-        "testSelectedFilesRoundTrip",
-        "testLegacyDirectoryRoundTrip",
-        "testConfigPathValidation",
-        "testBlankOverrideRoundTrip",
-        "testPathWithSpaces",
-        "testSelectedConfigSurvivesApplyAndReopen",
-        "testInvalidManualInputCannotApply",
-        "testHiddenManualInputDoesNotBlockModeChange",
+    PACKAGE + "actions.BiomeCheckOnSaveActionTest": {
+        "testFeatureSnapshotIsStable",
+        "testFileSpecificFailureFeedback",
+        "testIneligibleDocumentsAreSkipped",
+        "testPlatformCancellationPropagates",
     },
-    PACKAGE + "lsp.BiomeManualConfigLspTest": {
-        "testSelectedJsoncUsesSingleQuotes",
-        "testSelectedJsonUsesDoubleQuotes",
-        "testLegacyDirectoryUsesDoubleQuotes",
-    },
-    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
-        "testVersion1LaunchPreservesSelectedJsonc",
-        "testVersion1LegacyDirectoryLaunch",
-        "testVersion1EmptyOverrideOmitsConfigArgument",
+    PACKAGE + "actions.BiomeSaveOperationTest": {
+        "testCancellationExceptionFromOperationIsPreserved",
+        "testCompletionAndFailure",
+        "testFeatureStagesShareOneBudget",
+        "testOuterTimeoutPropagates",
+        "testOwnTimeoutIsRecoverable",
+        "testParentCancellationPropagates",
+        "testPlatformCancellationPropagates",
+        "testPlatformControlFlowPropagates",
     },
     PACKAGE + "lsp.BiomeManualConfigCliTest": {
         "testVersion1SelectionContract",
         "testVersion2SelectionContract",
     },
+    PACKAGE + "lsp.BiomeManualConfigLspTest": {
+        "testLegacyDirectoryUsesDoubleQuotes",
+        "testSelectedJsonUsesDoubleQuotes",
+        "testSelectedJsoncUsesSingleQuotes",
+    },
+    PACKAGE + "lsp.BiomeManualConfigV1LspTest": {
+        "testVersion1EmptyOverrideOmitsConfigArgument",
+        "testVersion1LaunchPreservesSelectedJsonc",
+        "testVersion1LegacyDirectoryLaunch",
+    },
+    PACKAGE + "lsp.BiomeSaveActionsTest": {
+        "testCancellationBeforeWriteDoesNotMutate",
+        "testCancellationWhileWriteIsQueuedDoesNotMutate",
+        "testCrLfOnlyEditPersists",
+        "testEnabledFeaturesRunInOrderAndPersist",
+        "testIdeFormatOnSaveOrderingAndUndo",
+        "testLfOnlyEditPersists",
+        "testMissingServerIsNoOp",
+        "testOrganizeImportsPersistsRealServerEdits",
+        "testPartialSuccessPersistsAfterTimeout",
+        "testPlatformCancellationPropagates",
+        "testProjectDisposalCancelsPendingSave",
+        "testSaveAllContinuesAfterFileFailure",
+        "testSaveAllContinuesAfterFileTimeout",
+        "testSavePreservesCrLfBytes",
+        "testSavePreservesLfBytes",
+        "testSeparatorPersistsWhenEarlierEditsReturnToSavedText",
+        "testTypingDiscardsStaleResponseAndRemainingFeatures",
+        "testTypingDuringSaveCancelsOnlyThatDocument",
+    },
     PACKAGE + "lsp.UnusedFunctionHighlightingTest": {
         "testUnusedFunctionDiagnosticsProduceSnapshotDiagnostics",
+    },
+    PACKAGE + "settings.BiomeManualConfigSettingsTest": {
+        "testBlankOverrideRoundTrip",
+        "testConfigPathValidation",
+        "testHiddenManualInputDoesNotBlockModeChange",
+        "testInvalidManualInputCannotApply",
+        "testLegacyDirectoryRoundTrip",
+        "testPathWithSpaces",
+        "testSelectedConfigSurvivesApplyAndReopen",
+        "testSelectedFilesRoundTrip",
     },
 }
 

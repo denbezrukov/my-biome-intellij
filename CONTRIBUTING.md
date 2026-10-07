@@ -44,14 +44,14 @@ plugin loaded.
 Run the required plugin regression suites from the repository root on Linux:
 
 ```shell
-./gradlew cleanTest test --no-build-cache --tests '*BiomeManualConfigSettingsTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeManualConfigCliTest' --tests '*UnusedFunctionHighlightingTest'
+./gradlew cleanTest test --no-build-cache --tests '*BiomeCheckOnSaveActionTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeManualConfigCliTest' --tests '*BiomeManualConfigLspTest' --tests '*BiomeManualConfigV1LspTest' --tests '*BiomeSaveActionsTest' --tests '*UnusedFunctionHighlightingTest' --tests '*BiomeManualConfigSettingsTest'
 python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
 
 These suites exercise settings persistence, both Biome CLI versions, and real plugin LSP sessions. The v1 launch tests
 require Linux. The fixture installer uses the committed pnpm lockfiles with `--frozen-lockfile`. `cleanTest` removes old
-results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 17 named
-tests across five classes to execute without failures or skips. The CI
+results; `--no-build-cache` prevents Gradle from restoring cached test results. The report guard requires all 47 named
+tests across 8 classes to execute without failures or skips. The CI
 job runs the guard and uploads reports even when Gradle fails. Packaging remains a separate `./gradlew buildPlugin` job.
 
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
