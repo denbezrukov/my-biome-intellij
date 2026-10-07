@@ -74,6 +74,8 @@ Disabled mode suppresses integration while retaining saved formatting/save prefe
 
 Check the native **Language Services** widget for Biome's version, current root, state and errors. Use its restart control after changing a manual executable or diagnosing a stalled server. A requested restart is asynchronous; confirm the replacement server is running and produces diagnostics or exact formatting. Project restart and dependency refresh must preserve another project's shared Biome daemon.
 
+Biome **2.2.3** has a reproduced upstream initialization issue: an early file open can be lost while workspace configuration is still initializing, leaving diagnostics and formatting unavailable even though the server is running. If affected, we recommend the tested **Biome 2.5.15** version and checking the selected executable/version in the widget. Controlled initial-open checks also passed on **1.9.4** and **2.5.14**; these results do not establish the earliest fixed version. This plugin does not apply a production workaround for the issue.
+
 Use **Help > Show Log in Files** (the name varies by OS) to locate the IDE log directory. Inspect `idea.log` for startup/save exceptions and file-specific timeout messages, and `language-services/Biome*` for server traffic and output logs. Do not guess a fixed home-directory path: custom IDE sandbox/log settings change it. Include the IDE build, plugin version, complete Biome version, affected file/config root, selected executable and Node interpreter, and relevant log excerpts in a [fork issue](https://github.com/denbezrukov/my-biome-intellij/issues).
 
 ## Usage
