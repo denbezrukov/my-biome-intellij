@@ -6,6 +6,7 @@ import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
+import com.github.biomejs.intellijbiome.services.BiomeDependencyRefreshService
 import com.intellij.openapi.components.service
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.KillableProcessHandler
@@ -67,6 +68,7 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
 
         // Select the executable here; the platform probes it during pooled server startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
+        project.service<BiomeDependencyRefreshService>()
         serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, configPath))
     }
 
@@ -75,10 +77,10 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         LspServerWidgetItem(lspServer, currentFile, BiomeIcons.BiomeIcon, BiomeConfigurable::class.java)
 }
 
-private class BiomeLspServerDescriptor(
+internal class BiomeLspServerDescriptor(
     project: Project,
     root: VirtualFile,
-    executable: String,
+    val executable: String,
     private val configPath: String?,
 ) : LspServerDescriptor(project, "Biome", root) {
     private val executionContext = BiomeTargetRunBuilder(project)

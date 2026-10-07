@@ -40,6 +40,8 @@ The plugin tries to use Biome from your project’s local dependencies (`node_mo
 
 You can also explicitly specify the `biome` binary the extension should use by configuring the `Biome CLI Path` in `Settings`->`Language & Frameworks`->`Biome Settings`.
 
+In Automatic mode, a successful Biome dependency upgrade refreshes the language servers in that IntelliJ project. Each open Biome root keeps its own dependency and configuration; other IntelliJ projects are unaffected. The plugin waits for the selected executables to work before restarting, so an incomplete or failed install keeps the existing servers running. Manual mode continues to use the existing Restart action.
+
 ### Biome Config resolution
 In `Automatic Biome configuration` mode, the plugin will look for a biome configuration file upwards from the current file. If it doesn't find one, it will stop LSP server.
 There are several reasons to behave like this:
