@@ -53,6 +53,7 @@ jobs:
           --tests '*OlderBiomeLanguageLspTest'
           --tests '*UnusedFunctionHighlightingTest'
           --tests '*V1BiomeLanguageLspTest'
+          --tests '*BiomeDisabledPreferencesTest'
           --tests '*BiomeManualConfigSettingsTest'
           --tests '*BiomeStartupLspTest'
           --tests '*BiomeStartupProbeTest'

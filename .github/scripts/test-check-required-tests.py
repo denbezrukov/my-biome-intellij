@@ -28,6 +28,7 @@ REQUIRED_TESTS = {
         "testValidJsoncClosesStreamOnce",
     ),
     PACKAGE + "actions.BiomeCheckOnSaveActionTest": (
+        "testDisabledPreferencesExecuteNoSaveWork",
         "testFeatureSnapshotIsStable",
         "testFileSpecificFailureFeedback",
         "testIneligibleDocumentsAreSkipped",
@@ -196,6 +197,13 @@ REQUIRED_TESTS = {
         "testJavascriptStillFormatsWithV1",
         "testUnsupportedGritRemainsUnchangedWithV1",
     ),
+    PACKAGE + "settings.BiomeDisabledPreferencesTest": (
+        "testActionsOnSaveResetAndApplyPreserveDisabledPreferences",
+        "testCancelDoesNotChangePreferencesOrMode",
+        "testDisableApplyReopenEnablePreservesPreferences",
+        "testDisabledSerializationPreservesPreferences",
+        "testInitiallyDisabledApplyPreservesPreferences",
+    ),
     PACKAGE + "settings.BiomeManualConfigSettingsTest": (
         "testBlankOverrideRoundTrip",
         "testConfigPathValidation",
@@ -262,7 +270,7 @@ class RequiredTestsGateTest(unittest.TestCase):
         )
         if expected_error is None:
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertIn("176 required tests across 22 classes", result.stdout)
+            self.assertIn("182 required tests across 23 classes", result.stdout)
         else:
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn(expected_error, result.stderr)
