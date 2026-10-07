@@ -57,6 +57,13 @@ job runs the guard and uploads reports even when Gradle fails. The launcher inve
 `testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes`: both require the native Node handler
 to finish while an owned child retains the inherited pipes, preserve that child, and retain exact CRLF output. Packaging remains a separate `./gradlew buildPlugin` job.
 
+The second-root dependency upgrade fixture keeps the upgrading root on 2.2.3 → 2.5.15 and
+pins the unchanged secondary root to 2.5.14. This isolates root ownership, executable selection,
+and configuration preservation from an independently reproduced Biome 2.2.3 initialization bug
+that can lose an early document open. The replacement still must deliver diagnostics and format
+correctly without a post-restart reopen or diagnostic retry. Other legacy and v1 coverage remains
+in the required inventory; the fixture choice does not fix the upstream 2.2.3 limitation.
+
 To check the report guard itself, run `python3 .github/scripts/test-check-required-tests.py`.
 
 The legacy Remote Robot UI tests are separate from this required gate. To run those alongside the full test suite:
