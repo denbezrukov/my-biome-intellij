@@ -19,6 +19,8 @@ import com.intellij.testFramework.builders.EmptyModuleFixtureBuilder
 import java.nio.file.Path
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.util.EnvironmentUtil
 import kotlinx.coroutines.*
 import java.nio.file.Files
 
@@ -67,6 +69,26 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
     fun testNativeRestartPreservesSharedDaemonAndCleansUpProxies() = checkRestart(nativePrimary = true)
 
     private fun checkRestart(nativePrimary: Boolean) {
+        val originalEnvironment = EnvironmentUtil.getEnvironmentMap().toMap()
+        // Both clients must share a daemon created by this scenario. A checkout-wide
+        // cache can legitimately reuse a daemon owned by an earlier fixture or JVM.
+        // Keep the temporary path short enough for Biome's Unix-domain socket.
+        val cache = Files.createTempDirectory("biome-shared-")
+        try {
+            EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(
+                originalEnvironment + ("XDG_CACHE_HOME" to cache.toString())
+            ))
+            checkRestartInIsolatedCache(nativePrimary)
+        } finally {
+            try {
+                EnvironmentUtil.setEnvironmentLoader(CompletableDeferred(originalEnvironment))
+            } finally {
+                FileUtil.delete(cache.toFile())
+            }
+        }
+    }
+
+    private fun checkRestartInIsolatedCache(nativePrimary: Boolean) {
         if (nativePrimary) {
             val native = Files.walk(root.toNioPath().resolve("node_modules/.pnpm")).use { paths ->
                 paths.filter { it.fileName.toString() == "biome" && it.parent.fileName.toString() == "cli-linux-x64" }
