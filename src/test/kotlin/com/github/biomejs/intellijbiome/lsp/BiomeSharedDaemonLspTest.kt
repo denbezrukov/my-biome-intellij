@@ -101,6 +101,10 @@ class BiomeSharedDaemonLspTest : BiomeLspFixtureTestCase() {
         }
         val original = establishPrimaryServer()
         com.intellij.ide.bookmarks.BookmarkManager.getInstance(project)
+        // Establish still-live primary native state before the secondary fixture
+        // snapshots global listener and package.json-pointer leak baselines.
+        com.intellij.refactoring.suggested.SuggestedRefactoringProvider.getInstance(project)
+        myFixture.doHighlighting()
         val factory = IdeaTestFixtureFactory.getFixtureFactory()
         val builder = factory.createFixtureBuilder("${name}-other-project")
         val otherFixture = factory.createCodeInsightFixture(builder.fixture)
