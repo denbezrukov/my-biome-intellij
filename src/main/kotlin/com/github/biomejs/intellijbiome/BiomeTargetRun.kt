@@ -8,6 +8,7 @@ import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.wsl.WSLDistribution
 import com.intellij.javascript.nodejs.execution.NodeTargetRun
+import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreter
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
 import com.intellij.javascript.nodejs.interpreter.local.NodeJsLocalInterpreter
 import com.intellij.javascript.nodejs.interpreter.wsl.WslNodeInterpreter
@@ -86,7 +87,8 @@ class BiomeTargetRunBuilder(val project: Project) {
             throw ExecutionException(BiomeBundle.message("biome.language.server.not.found"))
         }
 
-        val builder: ProcessCommandBuilder = if (configurationMode == ConfigurationMode.MANUAL && !hasNodeShebang(executable)) {
+        val builder: ProcessCommandBuilder = if (configurationMode == ConfigurationMode.MANUAL &&
+            (!supportsManualNodeTarget(executable, interpreter) || !hasNodeShebang(executable))) {
             GeneralProcessCommandBuilder()
         } else {
             if (interpreter !is NodeJsLocalInterpreter && interpreter !is WslNodeInterpreter) {
@@ -98,6 +100,14 @@ class BiomeTargetRunBuilder(val project: Project) {
         return builder.setExecutable(executable).setWorkingDirectory(workingDirectory).setCharset(Charsets.UTF_8)
     }
 }
+
+/** Keep existing UNC/WSL and foreign-interpreter dispatch until those targets are verified. */
+internal fun supportsManualNodeTarget(executable: String, interpreter: NodeJsInterpreter?): Boolean =
+    interpreter is NodeJsLocalInterpreter && !isUncPath(executable) &&
+        !isUncPath(interpreter.interpreterSystemIndependentPath)
+
+// WslPath's parser is host-gated; a lexical UNC guard must not depend on the IDE's host OS.
+private fun isUncPath(path: String): Boolean = path.replace('\\', '/').startsWith("//")
 
 /** Follow npm bin symlinks, but keep native files and wrappers with their own setup running directly. */
 private fun hasNodeShebang(executable: String): Boolean {

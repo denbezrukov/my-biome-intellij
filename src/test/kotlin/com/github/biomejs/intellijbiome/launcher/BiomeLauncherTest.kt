@@ -2,6 +2,8 @@ package com.github.biomejs.intellijbiome.launcher
 
 import com.github.biomejs.intellijbiome.BiomeTargetRun
 import com.github.biomejs.intellijbiome.BiomeTargetRunBuilder
+import com.github.biomejs.intellijbiome.GeneralProcessCommandBuilder
+import com.github.biomejs.intellijbiome.supportsManualNodeTarget
 import com.github.biomejs.intellijbiome.ProcessCommandParameter
 import com.github.biomejs.intellijbiome.extensions.runProcessFuture
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
@@ -9,6 +11,7 @@ import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterRef
 import com.intellij.javascript.nodejs.interpreter.local.NodeJsLocalInterpreter
+import com.intellij.javascript.nodejs.interpreter.wsl.WslNodeInterpreter
 import com.intellij.lang.javascript.modules.TestNpmPackage
 import com.intellij.lang.javascript.modules.TestNpmPackageInstaller
 import com.intellij.testFramework.builders.ModuleFixtureBuilder
@@ -115,6 +118,30 @@ class BiomeLauncherTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Module
         Files.writeString(script, "#!/usr/bin/env -S BIOME_BINARY=selected node\nconsole.log('wrapper');\n")
         val run = versionRun(script)
         assertTrue("Environment/option setup in a shebang must remain with its wrapper", run is BiomeTargetRun.General)
+    }
+
+    fun testManualLauncherKeepsSelectedTarget() {
+        val script = Path.of(myFixture.tempDirPath, "local node launcher")
+        Files.writeString(script, "#!/usr/bin/env node\nconsole.log('local');\n")
+        NodeJsInterpreterManager.getInstance(project).setInterpreterRef(
+            NodeJsInterpreterRef.create(WslNodeInterpreter("PR4-unavailable-distribution", "/usr/bin/node"))
+        )
+        assertTrue("A selected local script must not be moved to a WSL interpreter target",
+            BiomeTargetRunBuilder(project).getBuilder(script.toString()) is GeneralProcessCommandBuilder)
+
+        // Decision coverage only: these path/target pairs do not claim WSL process execution.
+        val local = NodeJsLocalInterpreter("C:/Node/node.exe")
+        val remote = WslNodeInterpreter("Ubuntu", "/usr/bin/node")
+        assertTrue(supportsManualNodeTarget(script.toString(), local))
+        assertFalse(supportsManualNodeTarget(script.toString(), remote))
+        assertFalse(supportsManualNodeTarget(script.toString(), null))
+        for (unc in listOf("\\\\wsl$\\Ubuntu\\home\\user\\biome", "\\\\wsl.localhost\\Ubuntu\\home\\user\\biome",
+            "//WSL$/Ubuntu/home/user/biome", "//wsl.localhost/Other/home/user/biome", "\\\\server\\share\\biome")) {
+            assertFalse("UNC selection must retain direct target dispatch: $unc", supportsManualNodeTarget(unc, local))
+            assertFalse("Matching or foreign WSL interpreter must retain direct dispatch: $unc", supportsManualNodeTarget(unc, remote))
+            assertFalse("A local-interpreter object with a UNC executable is not a verified local target",
+                supportsManualNodeTarget(script.toString(), NodeJsLocalInterpreter(unc)))
+        }
     }
 
     fun testCancellingNodeLauncherCollectionTerminatesItsProcess() {
