@@ -11,17 +11,30 @@ Minimum IDE build: **253 (2025.3)**. The project compiles against WebStorm 2025.
 
 ## Installation
 
-This repository is the [denbezrukov/my-biome-intellij fork](https://github.com/denbezrukov/my-biome-intellij). The [upstream Marketplace listing](https://plugins.jetbrains.com/plugin/22761-biome) is maintained separately and does not distribute unmerged changes from this fork.
+To install the Biome IntelliJ plugin, head over to the [official plugin page](https://plugins.jetbrains.com/plugin/22761-biome) or follow these steps:
 
-To install the source revision you are reviewing:
+### From JetBrains IDEs
 
-1. Check out that revision and run `./gradlew buildPlugin` with JDK 21.
+1. Open IntelliJ IDEA.
+2. Go to **Settings/Preferences**.
+3. Select **Plugins** from the left-hand menu.
+4. Click on the **Marketplace** tab.
+5. Search for "Biome" and click **Install**.
+6. Restart the IDE to activate the plugin.
+
+### From disk
+
+1. Download the plugin .zip from the *releases* tab.
+2. Press <kbd>⌘Cmd + ,</kbd> to open the IDE settings and then select *Plugins*.
+3. On the Plugins page, click the *Settings* button and then click *Install Plugin from Disk…*.
+
+### From source
+
+1. Check out the revision you want to test and run `./gradlew buildPlugin` with JDK 21.
 2. Locate `build/distributions/intellij-biome-VERSION.zip`, where `VERSION` is `pluginVersion` in `gradle.properties`.
 3. Open **Settings/Preferences > Plugins**, use the gear menu, and choose **Install Plugin from Disk…**. Select the plugin ZIP and restart the IDE if prompted.
 
-If you download a plugin through an Actions artifact, extract the outer artifact archive first and select the contained plugin ZIP. A directly downloaded GitHub release asset needs no outer archive extraction.
-
-The fork preserves upstream plugin ID `com.github.biomejs.intellijbiome`, vendor `biomejs`, and license attribution. Installing it replaces an installed Biome plugin with the same ID. The two packages cannot be installed side by side.
+For an Actions artifact, extract the outer archive first and select the plugin ZIP inside it. A GitHub release asset can be installed directly.
 
 ## Getting Started
 ### Biome Resolution
