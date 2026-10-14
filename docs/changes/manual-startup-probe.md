@@ -6,4 +6,4 @@ The deadline covers collecting the version process result. SDK target preparatio
 
 This change builds on shared-daemon ownership. Automatic and Manual proxies preserve a daemon used by another project, including cancellation before SDK handoff. Version probes retain recursive cleanup.
 
-Linux regression coverage includes manual v1/v2 arguments and working directories, coroutine and platform cancellation, process descendants, stop during the probe, stop during final process creation, and the process-exit observation race. The required inventory includes shared-daemon and highlighting controls. Windows and WSL were not exercised.
+Linux regression coverage includes manual v1/v2 arguments and working directories, coroutine and platform cancellation, process descendants, stop during the probe, stop during final process creation, and the process-exit observation race. The headless suite includes shared-daemon and highlighting controls. Windows and WSL were not exercised.
