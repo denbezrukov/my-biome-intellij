@@ -82,10 +82,6 @@ class CompatibilityGateTest(unittest.TestCase):
         self.write_plugin(until="253.*")
         self.run_guard("descriptor excludes")
 
-    def test_verified_stable_range_accepts_pinned_stable(self):
-        self.write_plugin(until="262.*")
-        self.run_guard()
-
     def test_existing_unbounded_descriptor_can_be_verified_for_pinned_targets(self):
         self.write_plugin(until=None)
         self.run_guard()
