@@ -35,7 +35,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
 
-@TestNpmPackage("@biomejs/biome@2.2.3")
+@TestNpmPackage("@biomejs/biome@2.5.15")
 class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
     private val notifications = CopyOnWriteArrayList<Notification>()
     private var requestDisposable: Disposable? = null
@@ -326,19 +326,11 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
     }
 
     fun testBothActionsApplyRealServerEditsAndUndo() {
-        // fileOpened acknowledges SDK dispatch, not Biome's registration of the document.
-        // Biome 2.2.3 can miss the first didOpen while loading its workspace configuration.
+        // Require the current server to become ready on the first document open.
         val events = RuntimeGateEvents(project, testRootDisposable)
         openFile()
         val file = myFixture.file.virtualFile
-        try {
-            events.awaitDiagnostics(file, timeout = 5)
-        } catch (_: AssertionError) {
-            FileEditorManager.getInstance(project).closeFile(file)
-            myFixture.configureFromExistingVirtualFile(file)
-            waitUntilFileOpenedByLspServer(project, file, timeout = 20)
-            events.awaitDiagnostics(file)
-        }
+        events.awaitDiagnostics(file, "2.5.15")
         val cases = listOf(
             Triple(BiomeApplySafeFixesAction(), "let value=1;console.log(value);\n", "const value = 1;\nconsole.log(value);\n"),
             Triple(BiomeSortImportAction(), "import { z } from \"./z\";\nimport { a } from \"./a\";\nconsole.log(a,z);\n",
