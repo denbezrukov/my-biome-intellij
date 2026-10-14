@@ -266,6 +266,4 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
     }
 
     private fun quote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
-
-    private fun jsString(value: String): String = "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 }

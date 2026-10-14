@@ -1,7 +1,6 @@
 package com.github.biomejs.intellijbiome
 
 import com.github.biomejs.intellijbiome.extensions.runProcessFuture
-import com.github.biomejs.intellijbiome.extensions.ProcessResult
 import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
@@ -10,7 +9,6 @@ import com.intellij.javascript.nodejs.util.NodePackage
 import com.intellij.javascript.nodejs.util.NodePackageDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.execution.process.OSProcessHandler
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -22,7 +20,6 @@ import com.intellij.execution.ExecutionException
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.coroutineContext
 import java.nio.file.Paths
 
@@ -67,18 +64,12 @@ class BiomePackage(private val project: Project) {
     }
 
     /** Collects the version of precisely the executable and target selected by the caller. */
-    suspend fun versionNumber(targetRun: BiomeTargetRun): String = versionNumber(targetRun) {}
-
-    suspend fun versionNumber(targetRun: BiomeTargetRun, checkStartupCancellation: () -> Unit): String {
-        var handler: OSProcessHandler? = null
-        var future: CompletableFuture<ProcessResult>? = null
+    suspend fun versionNumber(targetRun: BiomeTargetRun, checkStartupCancellation: () -> Unit = {}): String {
+        checkProbeCancellation(checkStartupCancellation)
+        // SDK target preparation is synchronous; the deadline bounds result collection.
+        val process = targetRun.startProcess()
         try {
-            checkProbeCancellation(checkStartupCancellation)
-            // SDK target preparation is synchronous; the deadline bounds result collection.
-            val process = targetRun.startProcess()
-            handler = process
             val collection = runProcessFuture(process)
-            future = collection
             val result = withTimeoutOrNull(5_000) {
                 while (!collection.isDone) {
                     checkProbeCancellation(checkStartupCancellation)
@@ -96,9 +87,7 @@ class BiomePackage(private val project: Project) {
         } finally {
             // Cleanup must survive parent cancellation, but never wait indefinitely for a child.
             withContext(NonCancellable + Dispatchers.IO) {
-                val process = handler
-                if (process != null && process.process.isAlive) {
-                    future?.cancel(true)
+                if (process.process.isAlive) {
                     terminateProbeProcess(process)
                     process.process.waitFor(1_000, TimeUnit.MILLISECONDS)
                 }

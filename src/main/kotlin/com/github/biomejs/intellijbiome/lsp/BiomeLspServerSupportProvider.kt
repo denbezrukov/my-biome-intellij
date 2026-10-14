@@ -137,10 +137,7 @@ private class BiomeLspServerDescriptor(
     }
 
     override fun startServerProcess(): OSProcessHandler {
-        val probe = probeRun ?: return targetRun.startProcess().also { handler ->
-            handler.setShouldDestroyProcessRecursively(false)
-            (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
-        }
+        val probe = probeRun ?: return targetRun.startProcess().preserveSharedDaemon()
         if (project.isDisposed) throw ProcessCanceledException()
         val manager = LspServerManager.getInstance(project)
         // The SDK queues process startup before adding the server in its EDT write action.
@@ -168,12 +165,7 @@ private class BiomeLspServerDescriptor(
                 val selectedRun = if (version.startsWith("1.")) {
                     legacyConfigPath?.let { legacyTargetRuns[it.forVersion(version)] } ?: targetRun
                 } else targetRun
-                val handler = selectedRun.startProcess().also {
-                    pendingHandler = it
-                    // A daemon can serve another client before this proxy reaches SDK handoff.
-                    it.setShouldDestroyProcessRecursively(false)
-                    (it as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
-                }
+                val handler = selectedRun.startProcess().also { pendingHandler = it }.preserveSharedDaemon()
                 // Synchronous target preparation can overlap a stop after the preceding guard.
                 currentCoroutineContext().ensureActive()
                 ProgressManager.checkCanceled()
@@ -199,6 +191,12 @@ private class BiomeLspServerDescriptor(
                 }
             }
         }
+    }
+
+    private fun OSProcessHandler.preserveSharedDaemon() = apply {
+        // A daemon can serve another client before this proxy reaches SDK handoff.
+        setShouldDestroyProcessRecursively(false)
+        (this as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
     }
 
     override fun getFilePath(file: VirtualFile): String =
