@@ -1,0 +1,18 @@
+{
+  "com.github.biomejs.intellijbiome.BiomeConfigTest": [
+    "testValidJsonClosesStreamOnce",
+    "testValidJsoncClosesStreamOnce",
+    "testRootAndExtendsSemanticsArePreserved",
+    "testMalformedInputReturnsNullAndClosesStreamOnce",
+    "testIoFailureOpeningReturnsNull",
+    "testIoFailureReadingReturnsNullAndClosesStreamOnce",
+    "testIoFailureClosingReturnsNullAndClosesStreamOnce",
+    "testCoroutineCancellationIdentityIsPreserved",
+    "testPlatformCancellationIdentityIsPreserved",
+    "testPlatformControlFlowIdentityIsPreserved",
+    "testFatalFailureIdentityIsPreserved",
+    "testUnexpectedRuntimeFailureIdentityIsPreserved",
+    "testClosingCancellationAfterExpectedReadFailureIsPreserved",
+    "testClosingFatalFailureAfterExpectedReadFailureIsPreserved"
+  ]
+}
