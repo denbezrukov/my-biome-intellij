@@ -22,5 +22,8 @@
     "testStaleDescriptorNeverStartsAProbeOrServer",
     "testStoppingInitializingServerCancelsProbeAndPreventsLaunch",
     "testStopDuringFinalProcessCreationDoesNotLoseProcessOwnership"
+  ],
+  "com.github.biomejs.intellijbiome.startup.BiomeCancelledStartupSharedDaemonLspTest": [
+    "testCancellingFinalNativeProxyPreservesAlreadySharedDaemon"
   ]
 }

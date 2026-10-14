@@ -1,7 +1,6 @@
 package com.github.biomejs.intellijbiome.lsp
 
 import com.github.biomejs.intellijbiome.*
-import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.Computable
@@ -150,7 +149,12 @@ private class BiomeLspServerDescriptor(
                 checkStartupCancellation()
                 // Backward compatibility for v1; `--config-path` is no longer available in v2.
                 val handler = (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
-                    .also { pendingHandler = it }
+                    .also {
+                        pendingHandler = it
+                        // A daemon can serve another client before this proxy reaches SDK handoff.
+                        it.setShouldDestroyProcessRecursively(false)
+                        (it as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
+                    }
                 // Synchronous target preparation can overlap a stop after the preceding guard.
                 currentCoroutineContext().ensureActive()
                 ProgressManager.checkCanceled()
@@ -160,15 +164,15 @@ private class BiomeLspServerDescriptor(
             }
             // Until runBlocking returns successfully, cancellation can discard its result.
             // The SDK connector takes ownership only after this method returns.
-            // Successful proxies must preserve a daemon shared by another project.
-            // Probes and cancelled startup handlers keep recursive cleanup.
-            handler.setShouldDestroyProcessRecursively(false)
-            (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
             pendingHandler = null
             handler
         } finally {
             pendingHandler?.let { handler ->
-                terminateProbeProcess(handler)
+                if (!handler.isStartNotified) handler.startNotify()
+                // Probe killProcess() terminates descendants even when recursive destruction
+                // is disabled. Normal destruction closes this proxy's input instead.
+                handler.destroyProcess()
+                if (handler.process.isAlive) handler.process.destroyForcibly()
                 try {
                     handler.process.waitFor(1_000, TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
