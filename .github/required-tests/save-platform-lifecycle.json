@@ -1,0 +1,17 @@
+{
+  "com.github.biomejs.intellijbiome.lsp.BiomeSavePlatformLifecycleTest": [
+    "testUsesPlatformDocumentUpdatingHook",
+    "testCrLfOnlyEditPersists",
+    "testLfOnlyEditPersists",
+    "testSeparatorPersistsWhenEarlierEditsReturnToSavedText",
+    "testTextAndCrLfFormattingUndoRedoRestoresBytes",
+    "testTextAndLfFormattingUndoRedoRestoresBytes",
+    "testSeparatorOnlyFormattingPreservesExternalDiskWrite",
+    "testDocumentSaveDetectsExternalDiskWrite",
+    "testSeparatorUndoPreservesExternalDiskWrite",
+    "testSeparatorRedoPreservesExternalDiskWrite",
+    "testIdeFormatOnSaveOrderingAndUndo",
+    "testTypingDuringSaveCancelsOnlyThatDocument",
+    "testProjectDisposalCancelsPendingSave"
+  ]
+}
