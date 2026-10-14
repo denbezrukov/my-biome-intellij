@@ -27,8 +27,6 @@ import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
-import kotlin.io.path.Path
-import kotlin.io.path.isRegularFile
 import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.ConfigurationItem
@@ -86,13 +84,18 @@ private class BiomeLspServerDescriptor(
             .setWorkingDirectory(root.path)
             .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
     } else null
-    private val legacyTargetRun = if (probeRun != null && !configPath.isNullOrEmpty()) {
-        BiomeTargetRunBuilder(project).getBuilder(executable).setWorkingDirectory(root.path).addParameters(listOf(
-            ProcessCommandParameter.Value("lsp-proxy"),
-            ProcessCommandParameter.Value("--config-path"),
-            ProcessCommandParameter.FilePath(Path(configPath)),
-        )).build()
-    } else null
+    private val legacyConfigPath = configPath?.takeIf { it.isNotEmpty() }
+        ?.let { BiomeV1ConfigPath(it, root.toNioPath()) }
+    private val legacyTargetRuns = if (probeRun != null && legacyConfigPath != null) {
+        // Prepare target paths before SDK startup; choose the supported form after the probe.
+        listOf(legacyConfigPath.selected, legacyConfigPath.directory).distinct().associateWith { path ->
+            BiomeTargetRunBuilder(project).getBuilder(executable).setWorkingDirectory(root.path).addParameters(listOf(
+                ProcessCommandParameter.Value("lsp-proxy"),
+                ProcessCommandParameter.Value("--config-path"),
+                ProcessCommandParameter.FilePath(path),
+            )).build()
+        }
+    } else emptyMap()
 
     private val targetRun: BiomeTargetRun = run {
         var builder = BiomeTargetRunBuilder(project)
@@ -101,12 +104,11 @@ private class BiomeLspServerDescriptor(
             .addParameters(listOf(ProcessCommandParameter.Value("lsp-proxy")))
 
         // Backward compatibility for v1; `--config-path` is no longer available in v2.
-        // Older v1 releases only accept the directory containing the configuration file.
         if (version != null && version.startsWith("1.") && !configPath.isNullOrEmpty()) {
-            val path = Path(configPath)
+            val path = BiomeV1ConfigPath(configPath, root.toNioPath()).forVersion(version)
             builder = builder.addParameters(listOf(
                 ProcessCommandParameter.Value("--config-path"),
-                ProcessCommandParameter.FilePath(if (path.isRegularFile()) path.parent else path)
+                ProcessCommandParameter.FilePath(path)
             ))
         }
 
@@ -163,13 +165,15 @@ private class BiomeLspServerDescriptor(
                 if (project.isDisposed) throw ProcessCanceledException()
                 checkStartupCancellation()
                 // Backward compatibility for v1; `--config-path` is no longer available in v2.
-                val handler = (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
-                    .also {
-                        pendingHandler = it
-                        // A daemon can serve another client before this proxy reaches SDK handoff.
-                        it.setShouldDestroyProcessRecursively(false)
-                        (it as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
-                    }
+                val selectedRun = if (version.startsWith("1.")) {
+                    legacyConfigPath?.let { legacyTargetRuns[it.forVersion(version)] } ?: targetRun
+                } else targetRun
+                val handler = selectedRun.startProcess().also {
+                    pendingHandler = it
+                    // A daemon can serve another client before this proxy reaches SDK handoff.
+                    it.setShouldDestroyProcessRecursively(false)
+                    (it as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
+                }
                 // Synchronous target preparation can overlap a stop after the preceding guard.
                 currentCoroutineContext().ensureActive()
                 ProgressManager.checkCanceled()

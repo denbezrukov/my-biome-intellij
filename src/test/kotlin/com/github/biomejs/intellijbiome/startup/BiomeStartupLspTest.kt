@@ -1,6 +1,7 @@
 package com.github.biomejs.intellijbiome.startup
 
 import com.github.biomejs.intellijbiome.lsp.BiomeLspServerSupportProvider
+import com.github.biomejs.intellijbiome.lsp.BiomeLspWorkspaceSettings
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.github.biomejs.intellijbiome.fixtures.StartupProbeProcess
@@ -36,6 +37,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import java.nio.file.StandardCopyOption
 import com.intellij.platform.lsp.api.LspServerState
+import org.eclipse.lsp4j.ConfigurationItem
 
 class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<ModuleFixture>>() {
     private lateinit var invocationLog: Path
@@ -107,19 +109,20 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         BiomeSettings.getInstance(project).configPath = config
         val configuredPath = BiomeSettings.getInstance(project).configPath
         val file = myFixture.addFileToProject("index.js", "let value = 1;").virtualFile
-        for (version in listOf("1.9.4", "2.2.3")) {
+        for (version in listOf("1.6.4", "1.7.0", "1.9.4", "2.2.3")) {
             descriptors.clear()
             Files.deleteIfExists(invocationLog)
             Files.writeString(executable, "#!/bin/sh\nprintf '%s\\n' \"\$*\" >> ${quote(invocationLog.toString())}\nif [ \"\$1\" = '--version' ]; then printf 'Version: $version\\n'; else $peerCommand; fi\n")
             BiomeLspServerSupportProvider().fileOpened(project, file, starter)
             start(descriptors.single())
             val arguments = Files.readAllLines(invocationLog).last()
-            assertEquals(if (version.startsWith("1.")) "lsp-proxy --config-path $configuredPath" else "lsp-proxy", arguments)
+            val expectedPath = if (version == "1.6.4") Path.of(configuredPath).parent.toString() else configuredPath
+            assertEquals(if (version.startsWith("1.")) "lsp-proxy --config-path $expectedPath" else "lsp-proxy", arguments)
         }
     }
 
     fun testManualV1AndV2CommandsUseSelectedSecondContentRoot() {
-        val secondPath = Files.createTempDirectory("biome-second-content-root")
+        val secondPath = Files.createTempDirectory("biome second content root ")
         Disposer.register(testRootDisposable) { FileUtil.delete(secondPath.toFile()) }
         Files.writeString(secondPath.resolve("biome.json"), "{}")
         Files.writeString(secondPath.resolve("index.js"), "let value = 1;")
@@ -128,19 +131,25 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         ModuleRootModificationUtil.addContentRoot(myFixture.module, secondRoot.path)
         assertTrue("The fixture must retain both content roots", ModuleRootManager.getInstance(myFixture.module).contentRoots.size >= 2)
         val file = secondRoot.findChild("index.js")!!
-        BiomeSettings.getInstance(project).configPath = secondPath.resolve("biome.json").toString()
+        BiomeSettings.getInstance(project).configPath = "biome.json"
         val configuredPath = BiomeSettings.getInstance(project).configPath
         assertTrue("The selected content root must differ from the default working directory", secondRoot.path != project.basePath)
 
-        for (version in listOf("1.9.4", "2.2.3")) {
+        for (version in listOf("1.6.4", "1.7.0", "1.9.4", "2.2.3")) {
             descriptors.clear()
             Files.deleteIfExists(invocationLog)
             Files.writeString(executable, "#!/bin/sh\nprintf '%s\\t%s\\n' \"\$PWD\" \"\$*\" >> ${quote(invocationLog.toString())}\nif [ \"\$1\" = '--version' ]; then printf 'Version: $version\\n'; else $peerCommand; fi\n")
             BiomeLspServerSupportProvider().fileOpened(project, file, starter)
             val descriptor = descriptors.single()
             assertEquals(listOf(secondRoot), descriptor.roots.toList())
+            val workspaceSettings = descriptor.getWorkspaceConfiguration(ConfigurationItem().apply {
+                section = "biome"
+            }) as BiomeLspWorkspaceSettings
+            assertEquals("Workspace configuration must retain the selected relative path",
+                configuredPath, workspaceSettings.configurationPath)
             start(descriptor)
-            val arguments = if (version.startsWith("1.")) "lsp-proxy --config-path $configuredPath" else "lsp-proxy"
+            val expectedPath = if (version == "1.6.4") secondRoot.path else secondPath.resolve(configuredPath).toString()
+            val arguments = if (version.startsWith("1.")) "lsp-proxy --config-path $expectedPath" else "lsp-proxy"
             assertEquals("Both commands must run in the selected content root for Biome $version",
                 listOf("${secondRoot.path}\t--version", "${secondRoot.path}\t$arguments"),
                 Files.readAllLines(invocationLog))

@@ -1,0 +1,6 @@
+{
+  // This explicit selection must win even when biome.json also exists.
+  "javascript": {
+    "formatter": { "quoteStyle": "single" }
+  }
+}
