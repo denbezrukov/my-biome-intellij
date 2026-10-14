@@ -4,6 +4,11 @@ name: _Build
 on:
   workflow_call:
     inputs:
+      runner:
+        type: string
+        default: depot-ubuntu-24.04-arm-16
+        required: false
+        description: 'Runner for the plugin build'
       nightly:
         type: boolean
         default: false
@@ -28,7 +33,7 @@ on:
 jobs:
   build-plugin:
     name: Build Plugin
-    runs-on: depot-ubuntu-24.04-arm-16
+    runs-on: ${{ inputs.runner }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       sha256: ${{ steps.archive.outputs.sha256 }}
@@ -82,3 +87,4 @@ jobs:
         with:
           name: Biome-${{ steps.version.outputs.version }}.zip
           path: build/distributions/intellij-biome-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error

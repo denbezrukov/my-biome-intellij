@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise real ZIP descriptors and release job authorization without publishing."""
+"""Exercise ZIP descriptors and release artifact transport without publishing."""
 import hashlib
 import io
 import json
@@ -68,6 +68,13 @@ class ReleaseArtifactTest(unittest.TestCase):
         self.assertEqual('253', record['since_build'])
 
 
+    def test_nightly_archive_uses_the_same_descriptor_contract(self):
+        version = '1.10.1-nightly.abcdef0'
+        archive = self.root / f'intellij-biome-{version}.zip'
+        write_zip(archive, descriptor(version=version))
+        self.validate(archive=archive, version=version, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+        self.assertEqual(version, json.loads(self.record.read_text())['version'])
+
     def test_missing_archive_is_rejected(self):
         self.archive.unlink()
         self.validate(expected_error='archive')
@@ -128,9 +135,14 @@ class ArtifactWorkflowTest(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_actual_download_validation_commands_reject_different_bytes(self):
-        for name in ('validate-download', 'publish-jetbrains', 'publish-github-release'):
+        transport_path = self.root / '.github/workflows/release-artifact-validation.yaml'
+        self.assertTrue(transport_path.exists(), 'A separate nonpublishing workflow must exercise artifact transport')
+        transport = yaml.safe_load(transport_path.read_text())
+        jobs = {name: self.workflow['jobs'][name] for name in ('validate-download', 'publish-jetbrains', 'publish-github-release')}
+        jobs['transport'] = transport['jobs']['validate-download']
+        for name, job in jobs.items():
             with self.subTest(job=name), tempfile.TemporaryDirectory() as temp:
-                steps = self.workflow['jobs'][name]['steps']
+                steps = job['steps']
                 download = next(step for step in steps if step.get('uses', '').startswith('actions/download-artifact@'))
                 validation = next(step for step in steps if step.get('id') == 'validate-archive')
                 destination = Path(temp) / download['with']['path']
@@ -153,13 +165,50 @@ class ArtifactWorkflowTest(unittest.TestCase):
                 self.assertIn('SHA256', result.stderr)
                 self.assertFalse(record.exists())
 
+    def test_transport_workflow_uses_production_build_without_publication(self):
+        path = self.root / '.github/workflows/release-artifact-validation.yaml'
+        self.assertTrue(path.exists(), 'Artifact transport needs a publication-free workflow')
+        workflow = yaml.safe_load(path.read_text())
+        events = workflow.get('on', workflow.get(True))
+        inputs = events['workflow_dispatch']['inputs']
+        self.assertEqual('depot-ubuntu-24.04-arm-16', inputs['runner']['default'])
+        self.assertIn('ubuntu-24.04', inputs['runner']['options'])
+        self.assertEqual({'contents': 'read'}, workflow['permissions'])
+        self.assertEqual({'build', 'validate-download'}, set(workflow['jobs']))
+        build = workflow['jobs']['build']
+        self.assertEqual('./.github/workflows/_build.yaml', build['uses'])
+        self.assertIs(build['with']['artifact'], True)
+        self.assertEqual('${{ inputs.runner }}', build['with']['runner'])
+        validation = workflow['jobs']['validate-download']
+        self.assertEqual(['build'], validation['needs'])
+        download = next(step for step in validation['steps'] if step.get('uses', '').startswith('actions/download-artifact@'))
+        self.assertEqual('Biome-${{ needs.build.outputs.version }}.zip', download['with']['name'])
+        step = next(step for step in validation['steps'] if step.get('id') == 'validate-archive')
+        self.assertEqual('${{ needs.build.outputs.version }}', step['env']['RELEASE_VERSION'])
+        self.assertEqual('${{ needs.build.outputs.sha256 }}', step['env']['RELEASE_SHA256'])
+        self.assertNotIn('secrets.', path.read_text())
+        self.assertNotIn('publishPlugin', path.read_text())
+        self.assertNotIn('action-gh-release', path.read_text())
+
+    def test_reusable_build_keeps_depot_default_and_fails_for_missing_upload(self):
+        build = yaml.safe_load((self.root / '.github/workflows/_build.yaml').read_text())
+        events = build.get('on', build.get(True))
+        runner = events['workflow_call']['inputs'].get('runner', {})
+        self.assertEqual('depot-ubuntu-24.04-arm-16', runner.get('default'))
+        producer = build['jobs']['build-plugin']
+        self.assertEqual('${{ inputs.runner }}', producer['runs-on'])
+        upload = next(step for step in producer['steps'] if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertEqual('error', upload['with'].get('if-no-files-found'))
+        self.assertEqual('${{ steps.archive.outputs.sha256 }}', producer['outputs']['sha256'])
+        self.assertEqual('${{ jobs.build-plugin.outputs.sha256 }}', events['workflow_call']['outputs']['sha256']['value'])
+
     def test_publication_waits_for_successful_validation(self):
         self.assertEqual(['build'], self.workflow['jobs']['validate-download']['needs'])
         self.assertNotIn('if', self.workflow['jobs']['validate-download'])
         for name in ('publish-jetbrains', 'publish-github-release'):
             job = self.workflow['jobs'][name]
             self.assertIn('validate-download', job['needs'])
-            self.assertEqual('inputs.publish', job['if'])
+            self.assertNotIn('if', job)
 
 
 if __name__ == '__main__':

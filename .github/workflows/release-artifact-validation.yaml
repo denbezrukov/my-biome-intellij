@@ -1,0 +1,56 @@
+name: Release artifact validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      nightly:
+        type: boolean
+        default: true
+        required: false
+        description: 'Build a nightly version'
+      runner:
+        type: choice
+        default: depot-ubuntu-24.04-arm-16
+        required: true
+        description: 'Runner for the build and download validation'
+        options:
+          - depot-ubuntu-24.04-arm-16
+          - ubuntu-24.04
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build plugin archive
+    uses: ./.github/workflows/_build.yaml
+    with:
+      nightly: ${{ inputs.nightly }}
+      artifact: true
+      runner: ${{ inputs.runner }}
+
+  validate-download:
+    name: Validate artifact transport
+    needs: [build]
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Biome-${{ needs.build.outputs.version }}.zip
+          path: build/downloaded-release
+      - name: Validate downloaded archive
+        id: validate-archive
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-${{ needs.build.outputs.version }}
+          path: build/release-record.json
+          if-no-files-found: error
