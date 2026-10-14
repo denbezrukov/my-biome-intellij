@@ -1,21 +1,9 @@
 name: Release artifact validation
 
 on:
-  workflow_dispatch:
-    inputs:
-      nightly:
-        type: boolean
-        default: true
-        required: false
-        description: 'Build a nightly version'
-      runner:
-        type: choice
-        default: depot-ubuntu-24.04-arm-16
-        required: true
-        description: 'Runner for the build and download validation'
-        options:
-          - depot-ubuntu-24.04-arm-16
-          - ubuntu-24.04
+  push:
+    branches:
+      - audit/artifact-transport-20261014
 
 permissions:
   contents: read
@@ -25,14 +13,14 @@ jobs:
     name: Build plugin archive
     uses: ./.github/workflows/_build.yaml
     with:
-      nightly: ${{ inputs.nightly }}
+      nightly: true
       artifact: true
-      runner: ${{ inputs.runner }}
+      runner: ubuntu-24.04
 
   validate-download:
     name: Validate artifact transport
     needs: [build]
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
