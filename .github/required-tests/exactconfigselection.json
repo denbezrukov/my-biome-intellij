@@ -5,10 +5,6 @@
     "testNonblankPathsKeepTheirCharacters",
     "testSelectedConfigSurvivesApplyAndReopen"
   ],
-  "com.github.biomejs.intellijbiome.lsp.BiomeManualConfigV1LspTest": [
-    "testVersion1LaunchPreservesSelectedJsonc",
-    "testVersion1LegacyDirectoryLaunch"
-  ],
   "com.github.biomejs.intellijbiome.lsp.BiomeManualConfigLspTest": [
     "testSelectedJsoncUsesSingleQuotes",
     "testSelectedJsonUsesDoubleQuotes",
