@@ -5,6 +5,7 @@ import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
@@ -105,7 +106,12 @@ private class BiomeLspServerDescriptor(
     }
 
     override fun startServerProcess(): OSProcessHandler =
-        targetRun.startProcess()
+        targetRun.startProcess().also { handler ->
+            // A daemon may serve another project. Stop only this client's proxy.
+            handler.setShouldDestroyProcessRecursively(false)
+            // Closing stdin lets a Node wrapper's native proxy disconnect as well.
+            (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
+        }
 
     override fun getFilePath(file: VirtualFile): String =
         targetRun.toTargetPath(file.path)
