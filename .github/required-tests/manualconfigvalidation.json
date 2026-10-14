@@ -1,0 +1,16 @@
+{
+  "com.github.biomejs.intellijbiome.settings.BiomeManualConfigValidationTest": [
+    "testInvalidManualPathsCannotApply",
+    "testSupportedFilesAndDirectoriesCanApply",
+    "testBlankManualPathCanApply",
+    "testHiddenInvalidInputDoesNotBlockAutomaticMode",
+    "testHiddenInvalidInputDoesNotBlockDisabledMode",
+    "testNewManualSelectionIsValidatedBeforeApplyingMode",
+    "testCustomJsonAndJsoncFilesCanApply",
+    "testRelativeFilesAndDirectoriesResolveAgainstProjectRoot",
+    "testRelativeConfigCanResolveAgainstSecondaryContentRoot",
+    "testRelativeConfigCannotResolveOnlyAgainstIdeWorkingDirectory",
+    "testDefaultProjectAcceptsRelativeConfigWithoutResolvingIt",
+    "testDefaultProjectRejectsMissingAbsoluteAndMalformedPaths"
+  ]
+}
