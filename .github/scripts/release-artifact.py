@@ -49,13 +49,13 @@ def validate_archive(archive, version, sha256):
     if not archive.is_file():
         raise ValueError('Missing release archive')
     if not re.fullmatch(r'[0-9a-f]{64}', sha256):
-        raise ValueError('Missing or invalid gate SHA256')
+        raise ValueError('Missing or invalid producer SHA256')
     digest = hashlib.sha256()
     with archive.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
     if digest.hexdigest() != sha256:
-        raise ValueError('Archive SHA256 does not match compatibility gate')
+        raise ValueError('Archive SHA256 does not match build job')
     try:
         plugin = descriptors(archive)
     except (zipfile.BadZipFile, ET.ParseError, RuntimeError, OSError) as error:
