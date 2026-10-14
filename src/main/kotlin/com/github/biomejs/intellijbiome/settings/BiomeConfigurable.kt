@@ -113,7 +113,10 @@ class BiomeConfigurable(internal val project: Project) :
                     configPathField = textFieldWithBrowseButton(
                         BiomeBundle.message("biome.config.path.label"),
                         project,
-                    ) { fileChosen(it) }.bindText(settings::configPath)
+                    ) { fileChosen(it) }.bindText(
+                        { settings.configPath },
+                        { settings.configPath = it.ifBlank { "" } },
+                    )
                         .validationOnInput { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
                         .validationOnApply { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
                         .comment(BiomeBundle.message("biome.config.path.help"))

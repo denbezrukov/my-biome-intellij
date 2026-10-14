@@ -1,5 +1,6 @@
 package com.github.biomejs.intellijbiome.settings
 
+import com.github.biomejs.intellijbiome.BiomePackage
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.testFramework.builders.ModuleFixtureBuilder
@@ -51,12 +52,17 @@ class BiomeManualConfigValidationTest : CodeInsightFixtureTestCase<ModuleFixture
     }
 
     fun testBlankManualPathCanApply() {
+        val selectedDirectory = myFixture.tempDirFixture.createFile("selected/biome.json", "{}").parent.path
         for (blank in listOf("", " \t\n")) {
             settings.configurationMode = ConfigurationMode.MANUAL
+            settings.configPath = selectedDirectory
             panel { configurable, component ->
                 configField(component).text = blank
                 configurable.apply()
                 assertEquals(ConfigurationMode.MANUAL, settings.configurationMode)
+                assertEquals("", settings.configPath)
+                assertTrue(settings.state.configPath.isNullOrEmpty())
+                assertEquals("", BiomePackage(project).configPath())
             }
         }
     }
