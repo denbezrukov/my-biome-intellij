@@ -57,6 +57,12 @@ To run the plugin's tests, run the `test` Gradle task.
 
 This section is for maintainers only. It describes the process for releasing a new version of the extension.
 
+To check the release artifact before publication, run `Release artifact validation` from the Actions tab. It builds
+the plugin, uploads the ZIP, and downloads it in a separate job to check its SHA256 and plugin descriptor. The
+`release-record-<version>` artifact records the archive path, checksum, version, and plugin identity. This workflow
+does not use publication credentials or create a release. Its runner defaults to Depot; select `ubuntu-24.04` when
+checking artifact transport on a GitHub-hosted runner. IDE compatibility verification remains a separate check.
+
 ### Releasing a stable version
 
 1. Create a new branch for the release.
