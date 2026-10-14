@@ -37,18 +37,69 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.intellij.testFramework.LoggedErrorProcessor
 
-@TestNpmPackage("@biomejs/biome@2.2.3")
+@TestNpmPackage("@biomejs/biome@2.5.15")
 class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
     override fun setUp() {
         super.setUp()
         setUpLspFixture("save-actions")
         val executableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) "biome.cmd" else "biome"
         val executable = Path.of(myFixture.tempDirPath, "node_modules", ".bin", executableName)
-        check(Files.isRegularFile(executable)) { "Locked Biome 2.2.3 fixture executable is required" }
+        check(Files.isRegularFile(executable)) { "Locked Biome 2.5.15 fixture executable is required" }
         BiomeSettings.getInstance(project).apply {
             configurationMode = ConfigurationMode.MANUAL
             executablePath = executable.toString()
         }
+    }
+
+    fun testCurrentServerUsesImmediateActionCapabilities() {
+        val document = openCurrentDocument()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        val server = com.intellij.platform.lsp.api.LspServerManager.getInstance(project)
+            .getServersForProvider(BiomeLspServerSupportProvider::class.java)
+            .single { it.descriptor.isSupportedFile(file) }
+        val capabilities = server.descriptor.createInitializeParams().capabilities
+        assertFalse("The bounded action path cannot resolve deferred edits",
+            capabilities.textDocument.codeAction.resolveSupport?.properties.orEmpty().contains("edit"))
+        assertTrue("Workspace configuration must remain enabled", capabilities.workspace.configuration)
+        assertNotNull("Native code action kinds must remain available", capabilities.textDocument.codeAction.codeActionLiteralSupport)
+        assertEquals("2.5.15", server.initializeResult?.serverInfo?.version)
+    }
+
+    fun testCurrentSafeFixesDoNotSortImportsWhenSortingIsDisabled() {
+        val document = openCurrentDocument()
+        val imports = "import { z } from \"./z\";\nimport { a } from \"./a\";\n"
+        val input = imports + "let value=1;console.log(z,a,value);\n"
+        WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
+        BiomeSettings.getInstance(project).apply {
+            applySafeFixesOnSave = true
+            sortImportOnSave = false
+            formatOnSave = false
+        }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertTrue("Safe fixes must execute on the first document open", document.text.contains("const value = 1;"))
+        assertTrue("Safe fixes alone must retain import order", document.text.startsWith(imports))
+        assertEquals(document.text, diskText(document))
+    }
+
+    fun testCurrentOrganizeImportsWorksOnFirstOpen() {
+        val document = openCurrentDocument()
+        WriteCommandAction.runWriteCommandAction(project) {
+            document.setText("import { z } from \"./z\";\nimport { a } from \"./a\";\nconsole.log(a,z);\n")
+        }
+        BiomeSettings.getInstance(project).sortImportOnSave = true
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertTrue("Organize imports must execute on the first document open",
+            document.text.startsWith("import { a } from \"./a\";\nimport { z } from \"./z\";\n"))
+        assertEquals(document.text, diskText(document))
+    }
+
+    private fun openCurrentDocument(): Document {
+        val events = RuntimeGateEvents(project, testRootDisposable)
+        val file = myFixture.findFileInTempDir("first.js") ?: error("Missing fixture first.js")
+        myFixture.configureFromExistingVirtualFile(file)
+        waitUntilFileOpenedByLspServer(project, file, "com.github.biomejs.intellijbiome.lsp.BiomeLspServerDescriptor")
+        events.awaitDiagnostics(file, version = "2.5.15")
+        return FileDocumentManager.getInstance().getDocument(file) ?: error("Missing document")
     }
 
     fun testSaveAllContinuesAfterFileFailure() = checkBatchIsolation { error("controlled request failure") }
@@ -229,7 +280,7 @@ class BiomeSaveActionsTest : BiomeLspFixtureTestCase() {
             }
             assertEquals(expectedCalls, calls.toList())
             val keyword = if (fixes) "const" else "let"
-            // Biome 2.2.3's fix-all response includes formatting; preserve that server edit.
+            // Biome's fix-all response includes formatting; preserve that server edit.
             val expected = if (fixes || format) "$keyword value = 1;\nconsole.log(value);\n" else "$keyword value=1;console.log(value);\n"
             assertEquals(expected, document.text)
             assertEquals(expected, diskText(document))
