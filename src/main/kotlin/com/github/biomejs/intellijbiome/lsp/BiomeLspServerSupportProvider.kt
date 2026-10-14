@@ -4,9 +4,9 @@ import com.github.biomejs.intellijbiome.*
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
+import com.intellij.openapi.components.service
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
@@ -33,15 +33,15 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val biome = BiomePackage(project)
         val configPath = biome.configPath()
 
+        if (!project.isDisposed && BiomeSettings.getInstance(project).usesConfigDiscovery()) {
+            project.service<BiomeConfigDiscoveryService>()
+        }
+
         // Finds the root directory of a Biome workspace. It's typically the parent directory of `biome.json`.
         // If no `biome.json` file found, nothing to do.
         val projectRootDir = project
             .getBaseDirectories()
             .find { VfsUtil.isUnder(file, setOf(it)) } ?: return
-
-        if (!project.isDisposed && BiomeSettings.getInstance(project).usesConfigDiscovery()) {
-            project.service<BiomeConfigDiscoveryService>()
-        }
 
         val root = if (configPath.isNullOrEmpty()) {
             file.findNearestBiomeConfig(projectRootDir)?.parent ?: return
