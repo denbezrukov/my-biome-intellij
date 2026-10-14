@@ -1,0 +1,21 @@
+{
+  "com.github.biomejs.intellijbiome.settings.BiomeConfigSelectionTest": [
+    "testSelectedFilesRoundTrip",
+    "testLegacyDirectoryRoundTrip",
+    "testNonblankPathsKeepTheirCharacters",
+    "testSelectedConfigSurvivesApplyAndReopen"
+  ],
+  "com.github.biomejs.intellijbiome.lsp.BiomeManualConfigV1LspTest": [
+    "testVersion1LaunchPreservesSelectedJsonc",
+    "testVersion1LegacyDirectoryLaunch"
+  ],
+  "com.github.biomejs.intellijbiome.lsp.BiomeManualConfigLspTest": [
+    "testSelectedJsoncUsesSingleQuotes",
+    "testSelectedJsonUsesDoubleQuotes",
+    "testLegacyDirectoryUsesDoubleQuotes"
+  ],
+  "com.github.biomejs.intellijbiome.lsp.BiomeManualConfigCliTest": [
+    "testVersion1SelectionContract",
+    "testVersion2SelectionContract"
+  ]
+}
