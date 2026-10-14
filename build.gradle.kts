@@ -110,16 +110,8 @@ tasks {
   wrapper {
     gradleVersion = providers.gradleProperty("gradleVersion").get()
   }
-
   test {
-    useJUnitPlatform()
     systemProperty("biome.test.expected.build", minimumIdeBuild)
-    // Biome shares its daemon by cache directory, even across separate IDE test JVMs.
-    // Keep the socket path short enough for Unix domain sockets in deeply nested checkouts.
-    val cacheKey = MessageDigest.getInstance("SHA-256")
-      .digest(projectDir.absolutePath.toByteArray(Charsets.UTF_8))
-      .take(8).joinToString("") { "%02x".format(it) }
-    environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
   }
 }
 
@@ -140,15 +132,7 @@ intellijPlatformTesting {
         ))
       }
       task {
-        useJUnitPlatform()
         systemProperty("biome.test.expected.build", currentIdeBuild)
-        // TestIde flattens plugin libraries into the IDE classloader. Use the
-        // target SDK's stdlib (in util-8.jar), as the installed plugin does.
-        // Keep compilation and the publishable ZIP on the minimum dependencies.
-        val cacheKey = MessageDigest.getInstance("SHA-256")
-          .digest("${projectDir.absolutePath}:current".toByteArray(Charsets.UTF_8))
-          .take(8).joinToString("") { "%02x".format(it) }
-        environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
       }
     }
   }
@@ -176,6 +160,43 @@ intellijPlatformTesting {
       }
     }
   }
+}
+
+// Keep the result guard independent of the build script for configuration-cache reuse.
+class RequiredTests : TestListener {
+  override fun beforeSuite(suite: TestDescriptor) {}
+  override fun beforeTest(test: TestDescriptor) {}
+  override fun afterTest(test: TestDescriptor, result: TestResult) {}
+  override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+    if (suite.parent == null) {
+      check(result.testCount > 0) { "No tests ran" }
+      check(result.skippedTestCount == 0L) { "${result.skippedTestCount} tests were skipped" }
+    }
+  }
+}
+
+tasks.withType<Test>().configureEach {
+  useJUnitPlatform {
+    if (providers.gradleProperty("uiTests").isPresent) includeTags("remote-robot")
+    else excludeTags("remote-robot")
+  }
+  // Execute tests on every invocation while preserving compilation and dependency caches.
+  outputs.upToDateWhen { false }
+  outputs.doNotCacheIf("Test results must come from this invocation") { true }
+  failOnNoDiscoveredTests = true
+  onlyIf("Test classes must exist") {
+    check((it as Test).testClassesDirs.asFileTree.matching { include("**/*.class") }.files.isNotEmpty()) {
+      "No test classes were compiled"
+    }
+    true
+  }
+  addTestListener(RequiredTests())
+  // Biome daemons share their cache. Isolate each checkout and runtime task,
+  // keeping the path short enough for Unix domain sockets.
+  val cacheKey = MessageDigest.getInstance("SHA-256")
+    .digest("${projectDir.absolutePath}:$name".toByteArray(Charsets.UTF_8))
+    .take(8).joinToString("") { "%02x".format(it) }
+  environment("XDG_CACHE_HOME", File(System.getProperty("java.io.tmpdir"), "biome-test-$cacheKey").absolutePath)
 }
 
 // TestIde uses the target IDE's Kotlin runtime; production compilation stays on 253.

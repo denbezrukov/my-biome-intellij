@@ -1,6 +1,0 @@
-{
-  "com.github.biomejs.intellijbiome.lsp.BiomeIdeRuntimeTest": [
-    "testPinnedIdeRuntimeIsActuallyLoaded",
-    "testPluginIsLoadedInRuntime"
-  ]
-}
