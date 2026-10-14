@@ -67,25 +67,5 @@ class ReleaseReviewTest(unittest.TestCase):
             self.assertIn('-PreleaseArchive=build/downloaded-release/intellij-biome-' + version + '.zip', arguments)
             self.assertIn('-PpluginVersion=' + version, arguments)
 
-    def test_actual_inspection_commands_accept_only_the_downloaded_zip(self):
-        for name in ('publish-jetbrains', 'publish-github-release'):
-            with self.subTest(job=name), tempfile.TemporaryDirectory() as temp:
-                steps = self.workflow['jobs'][name]['steps']
-                download = next(step for step in steps if step.get('uses', '').startswith('actions/download-artifact@'))
-                inspection = next((step for step in steps if step.get('id') == 'inspect-archive'), None)
-                self.assertIsNotNone(inspection, 'Publication must inspect its downloaded archive')
-                destination = Path(temp) / download['with']['path']
-                destination.mkdir(parents=True)
-                archive = destination / 'intellij-biome-1.10.1.zip'
-                with zipfile.ZipFile(archive, 'w') as package:
-                    package.writestr('plugin/lib/test.txt', 'archive control')
-                command = inspection['run'].replace('${{ needs.build.outputs.version }}', '1.10.1')
-                result = subprocess.run(['bash', '-e', '-c', command], cwd=temp, capture_output=True, text=True)
-                self.assertEqual(0, result.returncode, result.stderr)
-                archive.unlink()
-                result = subprocess.run(['bash', '-e', '-c', command], cwd=temp, capture_output=True, text=True)
-                self.assertNotEqual(0, result.returncode, 'Missing download must stop publication')
-
-
 if __name__ == '__main__':
     unittest.main()

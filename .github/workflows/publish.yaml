@@ -36,7 +36,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
         run: >-
-          python3 .github/scripts/release-artifact.py validate
+          python3 .github/scripts/release-artifact.py
           --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
           --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
           --record build/release-record.json
@@ -74,19 +74,13 @@ jobs:
           name: Biome-${{ needs.build.outputs.version }}.zip
           path: build/downloaded-release
 
-      - name: Inspect downloaded archive
-        id: inspect-archive
-        run: |
-          test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-          unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-
       - name: Validate downloaded archive
         id: validate-archive
         env:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
         run: >-
-          python3 .github/scripts/release-artifact.py validate
+          python3 .github/scripts/release-artifact.py
           --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
           --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
           --record build/release-record.json
@@ -117,19 +111,13 @@ jobs:
           name: Biome-${{ needs.build.outputs.version }}.zip
           path: build/downloaded-release
 
-      - name: Inspect downloaded archive
-        id: inspect-archive
-        run: |
-          test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-          unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-
       - name: Validate downloaded archive
         id: validate-archive
         env:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
         run: >-
-          python3 .github/scripts/release-artifact.py validate
+          python3 .github/scripts/release-artifact.py
           --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
           --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
           --record build/release-record.json

@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 import re
 import sys
@@ -80,19 +79,8 @@ def validate_archive(archive, version, sha256):
     }
 
 
-def outputs(values):
-    target = os.environ.get('GITHUB_OUTPUT')
-    if target:
-        with open(target, 'a', encoding='utf-8') as output:
-            for key, value in values.items():
-                if '\n' in str(value) or '\r' in str(value):
-                    raise ValueError('Invalid multiline workflow output')
-                output.write(f'{key}={value}\n')
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('validate',))
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--sha256', required=True)
@@ -102,7 +90,6 @@ def main():
         record = validate_archive(args.archive, args.version, args.sha256)
         args.record.parent.mkdir(parents=True, exist_ok=True)
         args.record.write_text(json.dumps(record, indent=2) + '\n')
-        outputs({'archive': str(args.archive), 'sha256': record['sha256']})
         print(json.dumps(record, indent=2))
     except (ValueError, OSError) as error:
         print(f'Release validation failed: {error}', file=sys.stderr)

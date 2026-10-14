@@ -52,7 +52,7 @@ class ReleaseArtifactTest(unittest.TestCase):
     def validate(self, expected_error=None, **overrides):
         values = {'archive': self.archive, 'version': '1.10.1', 'sha256': self.sha, 'record': self.record}
         values.update(overrides)
-        arguments = ['validate']
+        arguments = []
         for key, value in values.items():
             arguments += ['--' + key, value]
         return self.run_script(*arguments, expected_error=expected_error)
@@ -163,6 +163,11 @@ class ArtifactWorkflowTest(unittest.TestCase):
                 result = subprocess.run(['bash', '-e', '-c', validation['run']], cwd=temp, env=env, capture_output=True, text=True)
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn('SHA256', result.stderr)
+                self.assertFalse(record.exists())
+                archive.unlink()
+                result = subprocess.run(['bash', '-e', '-c', validation['run']], cwd=temp, env=env, capture_output=True, text=True)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('Missing release archive', result.stderr)
                 self.assertFalse(record.exists())
 
     def test_transport_workflow_uses_production_build_without_publication(self):
