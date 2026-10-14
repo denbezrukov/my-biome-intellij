@@ -37,19 +37,19 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val biome = BiomePackage(project)
         val configPath = biome.configPath()
 
-        val rootSettings = BiomeSettings.getInstance(project)
-        val projectRoots = project.getBaseDirectories()
-        fun findRoot(candidate: VirtualFile): VirtualFile? {
-            if (!rootSettings.fileSupported(candidate)) return null
-            val projectRoot = projectRoots.find { VfsUtil.isUnder(candidate, setOf(it)) } ?: return null
-            return if (configPath.isNullOrEmpty()) {
-                candidate.findNearestBiomeConfig(projectRoot)?.parent
-            } else {
-                projectRoot
-            }
+        // Finds the root directory of a Biome workspace. It's typically the parent directory of `biome.json`.
+        // If no `biome.json` file found, nothing to do.
+        val projectRootDir = project
+            .getBaseDirectories()
+            .find { VfsUtil.isUnder(file, setOf(it)) } ?: return
+
+        val root = if (configPath.isNullOrEmpty()) {
+            file.findNearestBiomeConfig(projectRootDir)?.parent ?: return
+        } else {
+            // When using manual configuration, the root directory will be the project root.
+            projectRootDir
         }
 
-        val root = findRoot(file) ?: return
         // Finds the Biome executable and check the version using CLI.
         val executable = biome.binaryPath(root.path, file, false) ?: return
         val version = runBlocking { biome.versionNumber() }
@@ -63,11 +63,13 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val scheduledRoots = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
             .flatMapTo(mutableSetOf(root)) { it.descriptor.roots.toList() }
         val index = ProjectFileIndex.getInstance(project)
+        val rootSettings = BiomeSettings.getInstance(project)
         for (openFile in FileEditorManager.getInstance(project).openFiles) {
             ProgressManager.checkCanceled()
             if (!openFile.isInLocalFileSystem || !index.isInContent(openFile) ||
                 !VfsUtilCore.isAncestor(root, openFile, true)) continue
-            val nestedRoot = findRoot(openFile) ?: continue
+            if (!rootSettings.fileSupported(openFile)) continue
+            val nestedRoot = openFile.findNearestBiomeConfig(projectRootDir)?.parent ?: continue
             if (nestedRoot in scheduledRoots || !VfsUtilCore.isAncestor(root, nestedRoot, true)) continue
             val nestedExecutable = biome.binaryPath(nestedRoot.path, openFile, false) ?: continue
             scheduledRoots.add(nestedRoot)
