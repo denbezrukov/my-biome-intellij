@@ -1,0 +1,8 @@
+{
+  "com.github.biomejs.intellijbiome.startup.BiomeStartupEligibilityTest": [
+    "testUnsupportedFileDoesNotProbeOrRequestServerStart",
+    "testDisabledPluginDoesNotProbeOrRequestServerStart",
+    "testSupportedFileRequestsServerStart",
+    "testDisposedProjectDoesNotRequestServerStart"
+  ]
+}
