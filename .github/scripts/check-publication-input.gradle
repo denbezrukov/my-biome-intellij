@@ -1,0 +1,22 @@
+gradle.projectsEvaluated {
+  rootProject.tasks.register('inspectPublicationInput') {
+    doLast {
+      def signer = rootProject.tasks.getByName('signPlugin')
+      def publisher = rootProject.tasks.getByName('publishPlugin')
+      def downloaded = rootProject.file('build/downloaded-release/intellij-biome-1.10.1.zip')
+      if (signer.archiveFile.get().asFile != downloaded) {
+        throw new GradleException('Signing does not consume the downloaded archive')
+      }
+      signer.didWork = false
+      if (publisher.archiveFile.get().asFile != downloaded) {
+        throw new GradleException('Unsigned publication does not consume the downloaded archive')
+      }
+      signer.didWork = true
+      if (publisher.archiveFile.get().asFile != signer.signedArchiveFile.get().asFile) {
+        throw new GradleException('Signed publication does not consume the signing output')
+      }
+      signer.didWork = false
+      println('PUBLICATION_INPUT_CHECKS_PASSED: downloaded input, unsigned upload, signed upload')
+    }
+  }
+}

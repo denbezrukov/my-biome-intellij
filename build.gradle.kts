@@ -97,6 +97,15 @@ intellijPlatform {
 }
 
 tasks {
+  providers.gradleProperty("releaseArchive").orNull?.let { path ->
+    val downloadedArchive = layout.projectDirectory.file(path)
+    signPlugin { archiveFile.set(downloadedArchive) }
+    publishPlugin {
+      archiveFile.set(signPlugin.map { signer ->
+        if (signer.didWork) signer.signedArchiveFile.get() else downloadedArchive
+      })
+    }
+  }
   wrapper {
     gradleVersion = providers.gradleProperty("gradleVersion").get()
   }
