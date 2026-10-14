@@ -57,14 +57,7 @@ To run the plugin's tests, run the `test` Gradle task.
 
 This section is for maintainers only. It describes the process for releasing a new version of the extension.
 
-The `Publish` workflow leaves `publish` unchecked by default. Use that setting to build the plugin ZIP for review
-without uploading to Marketplace or creating a GitHub release. Download the build artifact and inspect its contained
-ZIP before enabling publication. A successful build confirms packaging; IDE compatibility verification is a separate
-check.
-
 ### Releasing a stable version
-
-When starting `Publish` for a stable release, uncheck `nightly` and check `publish`.
 
 1. Create a new branch for the release.
    ```shell
@@ -83,8 +76,6 @@ When starting `Publish` for a stable release, uncheck `nightly` and check `publi
    the Actions tab in GitHub (uncheck _nightly_).
 
 ### Releasing a nightly version
-
-When starting `Publish` for a nightly release, check both `nightly` and `publish`.
 
 1. Commit your changes to the _main_ branch.
 2. Generate the changelog.
