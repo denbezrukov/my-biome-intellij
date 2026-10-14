@@ -1,5 +1,8 @@
 {
   "com.github.biomejs.intellijbiome.lsp.BiomeSaveActionsTest": [
+    "testCurrentServerUsesImmediateActionCapabilities",
+    "testCurrentSafeFixesDoNotSortImportsWhenSortingIsDisabled",
+    "testCurrentOrganizeImportsWorksOnFirstOpen",
     "testSaveAllContinuesAfterFileFailure",
     "testSaveAllContinuesAfterFileTimeout",
     "testTypingDiscardsStaleResponseAndRemainingFeatures",
