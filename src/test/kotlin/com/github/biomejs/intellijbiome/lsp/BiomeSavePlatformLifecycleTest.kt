@@ -39,7 +39,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.intellij.testFramework.LoggedErrorProcessor
 
-@TestNpmPackage("@biomejs/biome@2.2.3")
+@TestNpmPackage("@biomejs/biome@2.5.15")
 class BiomeSavePlatformLifecycleTest : BiomeLspFixtureTestCase() {
     private var verifyAfterDisposal: (() -> Unit)? = null
 
@@ -65,7 +65,7 @@ class BiomeSavePlatformLifecycleTest : BiomeLspFixtureTestCase() {
         setUpLspFixture("save-actions")
         val executableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) "biome.cmd" else "biome"
         val executable = Path.of(myFixture.tempDirPath, "node_modules", ".bin", executableName)
-        check(Files.isRegularFile(executable)) { "Locked Biome 2.2.3 fixture executable is required" }
+        check(Files.isRegularFile(executable)) { "Locked Biome 2.5.15 fixture executable is required" }
         BiomeSettings.getInstance(project).apply {
             configurationMode = ConfigurationMode.MANUAL
             executablePath = executable.toString()
@@ -75,6 +75,117 @@ class BiomeSavePlatformLifecycleTest : BiomeLspFixtureTestCase() {
     fun testUsesPlatformDocumentUpdatingHook() {
         assertTrue(com.intellij.ide.actionsOnSave.impl.ActionsOnSaveFileDocumentManagerListener.DocumentUpdatingActionOnSave::class.java
             .isAssignableFrom(BiomeCheckOnSaveAction::class.java))
+    }
+
+    fun testCurrentFormatterConvertsCrLfToLfWithoutTextEdits() =
+        checkCurrentFormatterLfOutput("const value = 1;\nconsole.log(value);\n", expectTextEdits = false)
+
+    fun testCurrentFormatterConvertsCrLfToLfWithSpaceOnlyEdits() =
+        checkCurrentFormatterLfOutput("const value=1;\nconsole.log(value);\n", expectTextEdits = true)
+
+    private fun checkCurrentFormatterLfOutput(input: String, expectTextEdits: Boolean) {
+        val config = myFixture.findFileInTempDir("biome.json") ?: error("Missing config")
+        WriteCommandAction.runWriteCommandAction(project) {
+            com.intellij.openapi.vfs.VfsUtil.saveText(config, """{"formatter":{"lineEnding":"lf"}}""")
+        }
+        val events = RuntimeGateEvents(project, testRootDisposable)
+        val document = openDocuments().last()
+        val manager = FileDocumentManager.getInstance()
+        val file = manager.getFile(document)!!
+        events.awaitDiagnostics(file, "2.5.15")
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = "\r\n"
+            document.setText("const saved = 0;\n")
+        }
+        manager.saveDocument(document)
+        assertEquals("const saved = 0;\r\n", diskText(document))
+        val response = AtomicReference<List<TextEdit>>()
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit>? =
+                    DefaultBiomeLspRequests.formatting(server, params).also { response.set(it) }
+            }), testRootDisposable)
+        WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
+        val changedRanges = mutableListOf<Pair<Int, Int>>()
+        document.addDocumentListener(object : com.intellij.openapi.editor.event.DocumentListener {
+            override fun documentChanged(event: com.intellij.openapi.editor.event.DocumentEvent) {
+                changedRanges += event.offset to event.oldLength
+            }
+        }, testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        val edits = response.get() ?: error("Real formatter did not respond")
+        assertEquals(expectTextEdits, edits.isNotEmpty())
+        assertTrue("This response must exercise edits with no separator text",
+            edits.all { !it.newText.contains('\n') && !it.newText.contains('\r') })
+        val formatted = "const value = 1;\nconsole.log(value);\n"
+        assertEquals(formatted, document.text)
+        assertEquals("The complete LF output must determine disk separators", formatted, diskText(document))
+        assertEquals("\n", file.detectedLineSeparator)
+        assertEquals(expectTextEdits, changedRanges.isNotEmpty())
+        assertTrue("Formatting must leave the unchanged second line outside its edits",
+            changedRanges.all { (offset, length) -> offset + length < input.indexOf('\n') })
+        BiomeSettings.getInstance(project).formatOnSave = false
+        val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
+        val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
+        undo.undo(editor)
+        assertEquals(input, document.text)
+        manager.saveDocument(document)
+        assertEquals(input.replace("\n", "\r\n"), diskText(document))
+        undo.redo(editor)
+        assertEquals(formatted, document.text)
+        manager.saveDocument(document)
+        assertEquals(formatted, diskText(document))
+    }
+
+    fun testNullFormattingResponsePreservesCrLfBytes() {
+        val document = openDocuments().last()
+        val manager = FileDocumentManager.getInstance()
+        val file = manager.getFile(document)!!
+        WriteCommandAction.runWriteCommandAction(project) {
+            file.detectedLineSeparator = "\r\n"
+            document.setText("const saved = 0;\n")
+        }
+        manager.saveDocument(document)
+        assertEquals("const saved = 0;\r\n", diskText(document))
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit>? = null
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) { document.setText("const value=1;\n") }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals("const value=1;\n", document.text)
+        assertEquals("const value=1;\r\n", diskText(document))
+        assertEquals("\r\n", file.detectedLineSeparator)
+    }
+
+    fun testSplitCrLfEditsDoNotInsertBlankLines() {
+        val document = openDocuments().last()
+        val input = "const value = 1;\nconsole.log(value);\n"
+        val lines = input.lines()
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> =
+                    listOf(0, 1).map { line ->
+                        val end = Position(line, lines[line].length)
+                        TextEdit(Range(end, end), "\r")
+                    }
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals("CRLF split across edits and existing text must normalize once", input, document.text)
+        assertEquals(input.replace("\n", "\r\n"), diskText(document))
+        BiomeSettings.getInstance(project).formatOnSave = false
+        val editor = com.intellij.openapi.fileEditor.impl.text.TextEditorProvider.getInstance().getTextEditor(myFixture.editor)
+        val undo = com.intellij.openapi.command.undo.UndoManager.getInstance(project)
+        undo.undo(editor)
+        assertEquals(input, document.text)
+        assertEquals(input, diskText(document))
+        undo.redo(editor)
+        assertEquals(input, document.text)
+        assertEquals(input.replace("\n", "\r\n"), diskText(document))
     }
 
     fun testCrLfOnlyEditPersists() = checkSeparatorOnlyEdit("\n", "\r\n", moveCaretBeforeRedo = true)

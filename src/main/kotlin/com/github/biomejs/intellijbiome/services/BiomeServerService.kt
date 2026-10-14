@@ -2,6 +2,8 @@ package com.github.biomejs.intellijbiome.services
 
 import com.github.biomejs.intellijbiome.BiomeBundle
 import com.github.biomejs.intellijbiome.lsp.BiomeLspServerSupportProvider
+import com.intellij.diff.comparison.ComparisonManager
+import com.intellij.diff.comparison.ComparisonPolicy
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.readAction
@@ -10,6 +12,7 @@ import com.intellij.openapi.command.execute
 import com.intellij.openapi.command.undo.BasicUndoableAction
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.command.undo.UnexpectedUndoException
+import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import kotlinx.coroutines.currentCoroutineContext
@@ -27,7 +30,6 @@ import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.customization.LspIntentionAction
 import com.intellij.platform.lsp.util.getLsp4jRange
 import com.intellij.platform.lsp.util.getRangeInDocument
-import com.intellij.util.LineSeparator
 import org.eclipse.lsp4j.*
 import java.util.*
 import java.io.IOException
@@ -114,7 +116,7 @@ class BiomeServerService internal constructor(
                 )
             }
             val edits = requests.formatting(server, params)
-            if (!edits.isNullOrEmpty()) {
+            if (edits != null) {
                 applyIfCurrent(document, file, stamp, commandName) { applyFormatting(document, file, edits) }
             }
         }
@@ -142,35 +144,26 @@ class BiomeServerService internal constructor(
     }
 
     private fun applyFormatting(document: Document, file: VirtualFile, edits: List<TextEdit>) {
-        var lineSeparator: LineSeparator? = null
-
-        edits.asReversed().forEach {
-            val range = getRangeInDocument(document, it.range) ?: return@forEach
-
-            if (StringUtil.isEmpty(it.newText)) {
-                document.deleteString(range.startOffset, range.endOffset)
-            } else {
-                val normalizedText = StringUtil.convertLineSeparators(it.newText)
-
-                if (range.endOffset >= 0) {
-                    if (range.length <= 0) {
-                        document.insertString(range.startOffset, normalizedText)
-                    } else {
-                        document.replaceString(range.startOffset, range.endOffset, normalizedText)
-                    }
-                } else if (range.startOffset > 0) {
-                    document.insertString(range.startOffset, normalizedText)
-                } else if (!StringUtil.equals(document.charsSequence, normalizedText)) {
-                    document.setText(normalizedText)
-                }
-            }
-
-            StringUtil.detectSeparators(it.newText)?.apply {
-                lineSeparator = this
+        val original = document.text
+        val output = StringBuilder(original)
+        edits.asReversed().forEach { edit ->
+            val range = getRangeInDocument(document, edit.range) ?: return
+            output.replace(range.startOffset, range.endOffset, edit.newText)
+        }
+        // Even an empty edit list describes complete LF output from the normalized document.
+        // Normalize after reconstruction because a CRLF pair can cross an edit boundary.
+        val rawOutput = output.toString()
+        val normalizedOutput = StringUtil.convertLineSeparators(rawOutput)
+        if (original != normalizedOutput) {
+            val indicator = ProgressManager.getInstance().progressIndicator ?: EmptyProgressIndicator()
+            val changes = ComparisonManager.getInstance().compareChars(
+                original, normalizedOutput, ComparisonPolicy.DEFAULT, indicator)
+            changes.asReversed().forEach { change ->
+                document.replaceString(change.startOffset1, change.endOffset1,
+                    normalizedOutput.substring(change.startOffset2, change.endOffset2))
             }
         }
-
-        lineSeparator?.let { applyLineSeparator(document, file, it.separatorString) }
+        StringUtil.detectSeparators(rawOutput)?.let { applyLineSeparator(document, file, it.separatorString) }
     }
 
     private fun applyLineSeparator(document: Document, file: VirtualFile, separator: String) {
