@@ -1,0 +1,10 @@
+{
+  "com.github.biomejs.intellijbiome.settings.BiomeDisabledPreferencesTest": [
+    "testDisableApplyReopenEnablePreservesPreferences",
+    "testInitiallyDisabledApplyPreservesPreferences",
+    "testDisabledSerializationPreservesPreferences",
+    "testCancelDoesNotChangePreferencesOrMode",
+    "testActionsOnSaveResetAndApplyPreserveDisabledPreferences",
+    "testDisabledPreferencesDoNotEnableSaveAction"
+  ]
+}
