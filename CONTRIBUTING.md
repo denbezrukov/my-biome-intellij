@@ -57,6 +57,11 @@ To run the plugin's tests, run the `test` Gradle task.
 
 This section is for maintainers only. It describes the process for releasing a new version of the extension.
 
+The `Publish` workflow leaves `publish` unchecked by default. Use that setting to build the plugin ZIP for review
+without uploading to Marketplace or creating a GitHub release. Download the build artifact and inspect its contained
+ZIP before enabling publication. A successful build confirms packaging; IDE compatibility verification is a separate
+check.
+
 ### Releasing a stable version
 
 1. Create a new branch for the release.
@@ -73,7 +78,7 @@ This section is for maintainers only. It describes the process for releasing a n
 5. Create a pull request named `chore(release): prepare vX.Y.Z`.
 6. Merge the pull request.
 7. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub (uncheck _nightly_).
+   the Actions tab in GitHub. Uncheck `nightly` and check `publish` to upload to Marketplace and create a GitHub draft.
 
 ### Releasing a nightly version
 
@@ -84,4 +89,4 @@ This section is for maintainers only. It describes the process for releasing a n
    ```
 3. Commit and push your changes.
 4. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub (check _nightly_).
+   the Actions tab in GitHub. Check both `nightly` and `publish` to upload to Marketplace and create a GitHub draft.
