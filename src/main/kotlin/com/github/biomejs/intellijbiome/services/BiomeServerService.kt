@@ -109,7 +109,7 @@ class BiomeServerService internal constructor(
                 )
             }
             val edits = requests.formatting(server, params)
-            if (!edits.isNullOrEmpty()) {
+            if (edits != null) {
                 applyIfCurrent(document, file, stamp, commandName) { applyFormatting(document, file, edits) }
             }
         }
