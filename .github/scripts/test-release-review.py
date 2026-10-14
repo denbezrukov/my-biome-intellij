@@ -31,6 +31,22 @@ class ReleaseReviewTest(unittest.TestCase):
         upload = next(step for step in github if step.get('uses', '').startswith('softprops/action-gh-release@'))
         self.assertEqual('build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip', upload['with']['files'])
 
+    def test_marketplace_command_uses_the_build_version_for_its_download(self):
+        job = self.workflow['jobs']['publish-jetbrains']
+        publish = next(step for step in job['steps'] if step.get('name') == 'Publish Plugin')
+        version = '1.10.1-nightly.abcdef0'
+        command = publish['run'].replace('${{ needs.build.outputs.version }}', version)
+        with tempfile.TemporaryDirectory() as temp:
+            runner = Path(temp) / 'gradlew'
+            runner.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > invocation.txt\n')
+            runner.chmod(0o755)
+            result = subprocess.run(['bash', '-e', '-c', command], cwd=temp, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            arguments = (Path(temp) / 'invocation.txt').read_text().splitlines()
+            self.assertEqual('publishPlugin', arguments[0])
+            self.assertIn('-PreleaseArchive=build/downloaded-release/intellij-biome-' + version + '.zip', arguments)
+            self.assertIn('-PpluginVersion=' + version, arguments)
+
     def test_actual_inspection_commands_accept_only_the_downloaded_zip(self):
         for name in ('publish-jetbrains', 'publish-github-release'):
             with self.subTest(job=name), tempfile.TemporaryDirectory() as temp:

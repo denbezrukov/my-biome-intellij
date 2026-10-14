@@ -102,7 +102,7 @@ tasks {
     signPlugin { archiveFile.set(downloadedArchive) }
     publishPlugin {
       archiveFile.set(signPlugin.map { signer ->
-        if (signer.didWork) signer.signedArchiveFile.get() else downloadedArchive
+        if (signer.onlyIf.isSatisfiedBy(signer)) signer.signedArchiveFile.get() else downloadedArchive
       })
     }
   }

@@ -29,7 +29,7 @@ jobs:
     if: inputs.publish
     name: Publish to JetBrains Marketplace
     needs: [ build ]
-    runs-on: depot-ubuntu-24.04-arm-16
+    runs-on: ubuntu-24.04
     environment: intellij-plugin
     steps:
       - name: Checkout
@@ -60,25 +60,19 @@ jobs:
           test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
           unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
 
-      - name: Restore gradle.properties
-        uses: actions/cache/restore@v3
-        with:
-          path: gradle.properties
-          key: gradle.properties.${{ github.sha }}
-
       - name: Publish Plugin
         env:
           PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew publishPlugin -PreleaseArchive="build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
+        run: ./gradlew publishPlugin -PreleaseArchive="build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip" -PpluginVersion="${{ needs.build.outputs.version }}"
 
   publish-github-release:
     if: inputs.publish
     name: Publish to GitHub Releases
     needs: [ build ]
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

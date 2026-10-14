@@ -11,9 +11,15 @@ gradle.projectsEvaluated {
       if (publisher.archiveFile.get().asFile != downloaded) {
         throw new GradleException('Unsigned publication does not consume the downloaded archive')
       }
-      signer.didWork = true
+      // Configure inert values without executing signing. A cached/up-to-date
+      // signing task can have didWork=false and still requires its signed output.
+      signer.privateKey.set('test-only-key')
+      signer.certificateChain.set('test-only-chain')
+      if (!signer.onlyIf.isSatisfiedBy(signer)) {
+        throw new GradleException('Signing configuration control did not enable the native signing task')
+      }
       if (publisher.archiveFile.get().asFile != signer.signedArchiveFile.get().asFile) {
-        throw new GradleException('Signed publication does not consume the signing output')
+        throw new GradleException('Configured signing must select signed output even when didWork is false')
       }
       signer.didWork = false
       println('PUBLICATION_INPUT_CHECKS_PASSED: downloaded input, unsigned upload, signed upload')
