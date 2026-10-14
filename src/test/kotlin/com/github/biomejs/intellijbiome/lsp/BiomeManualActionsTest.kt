@@ -17,7 +17,6 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -454,29 +453,21 @@ class BiomeManualActionsTest : BiomeLspFixtureTestCase() {
             it.right.disabled = CodeActionDisabled("controlled unavailable fix")
         }
 
-    private fun event(action: AnAction, editor: Boolean = true): AnActionEvent {
+    private fun event(action: AnAction): AnActionEvent {
         val context = DataContext { key ->
             when (key) {
                 CommonDataKeys.PROJECT.name -> project
-                CommonDataKeys.EDITOR.name -> if (editor) myFixture.editor else null
+                CommonDataKeys.EDITOR.name -> myFixture.editor
                 CommonDataKeys.VIRTUAL_FILE.name -> myFixture.file.virtualFile
                 else -> null
             }
         }
-        return AnActionEvent.createFromAnAction(action, null, if (editor) ActionPlaces.EDITOR_POPUP else ActionPlaces.PROJECT_VIEW_POPUP, context)
+        return AnActionEvent.createFromAnAction(action, null, ActionPlaces.EDITOR_POPUP, context)
     }
 
-    private fun update(action: AnAction, event: AnActionEvent) {
-        val future = ApplicationManager.getApplication().executeOnPooledThread {
-            ReadAction.run<RuntimeException> { action.update(event) }
-        }
-        PlatformTestUtil.waitWithEventsDispatching("BGT update did not finish", { future.isDone }, 10)
-        future.get()
-    }
-
-    private fun invoke(action: AnAction, event: AnActionEvent = event(action)) {
+    private fun invoke(action: AnAction) {
         notifications.clear()
-        action.actionPerformed(event)
+        action.actionPerformed(event(action))
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
     }
 

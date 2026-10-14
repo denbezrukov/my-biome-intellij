@@ -28,23 +28,21 @@ internal fun runBiomeManualAction(
             result = BiomeServerService.getInstance(project).executeFeatures(document, EnumSet.of(feature))
         }
         currentCoroutineContext().ensureActive()
+        fun fileOutcome(message: String, type: NotificationType = NotificationType.WARNING) =
+            Triple(BiomeBundle.message("biome.manual.$message.title"),
+                BiomeBundle.message("biome.manual.$message.description", file.name), type)
+
         val (title, content, type) = when (operation) {
             BiomeSaveOutcome.Completed -> when (result) {
                 Outcome.Changed -> Triple(BiomeBundle.message("$messagePrefix.success.label"),
                     BiomeBundle.message("$messagePrefix.success.description"), NotificationType.INFORMATION)
-                Outcome.PartiallyChanged -> Triple(BiomeBundle.message("biome.manual.partial.title"),
-                    BiomeBundle.message("biome.manual.partial.description", file.name), NotificationType.WARNING)
-                Outcome.NotApplied -> Triple(BiomeBundle.message("biome.manual.not.applied.title"),
-                    BiomeBundle.message("biome.manual.not.applied.description", file.name), NotificationType.WARNING)
-                Outcome.Unchanged -> Triple(BiomeBundle.message("biome.manual.unchanged.title"),
-                    BiomeBundle.message("biome.manual.unchanged.description", file.name), NotificationType.INFORMATION)
-                Outcome.Unavailable -> Triple(BiomeBundle.message("biome.manual.unavailable.title"),
-                    BiomeBundle.message("biome.manual.unavailable.description", file.name), NotificationType.WARNING)
-                Outcome.Stale -> Triple(BiomeBundle.message("biome.manual.stale.title"),
-                    BiomeBundle.message("biome.manual.stale.description", file.name), NotificationType.WARNING)
+                Outcome.PartiallyChanged -> fileOutcome("partial")
+                Outcome.NotApplied -> fileOutcome("not.applied")
+                Outcome.Unchanged -> fileOutcome("unchanged", NotificationType.INFORMATION)
+                Outcome.Unavailable -> fileOutcome("unavailable")
+                Outcome.Stale -> fileOutcome("stale")
             }
-            BiomeSaveOutcome.TimedOut -> Triple(BiomeBundle.message("biome.manual.timeout.title"),
-                BiomeBundle.message("biome.manual.timeout.description", file.name), NotificationType.WARNING)
+            BiomeSaveOutcome.TimedOut -> fileOutcome("timeout")
             is BiomeSaveOutcome.Failed -> Triple(BiomeBundle.message("$messagePrefix.failure.label"),
                 BiomeBundle.message("$messagePrefix.failure.description", operation.cause.message ?: operation.cause.toString()),
                 NotificationType.ERROR)
