@@ -8,6 +8,7 @@ import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
@@ -113,11 +114,14 @@ private class BiomeLspServerDescriptor(
     }
 
     override val lspDiagnosticsSupport = object : LspDiagnosticsSupport() {
-        override fun getMessage(diagnostic: Diagnostic) =
-            "Biome: ${diagnostic.message} (${diagnostic.code.left})"
+        override fun getMessage(diagnostic: Diagnostic): String {
+            val code = diagnostic.code?.let { it.left ?: it.right?.toString() }
+            return "Biome: ${super.getMessage(diagnostic)}" + (code?.let { " ($it)" } ?: "")
+        }
 
         override fun getTooltip(diagnostic: Diagnostic) =
-            getMessage(diagnostic)
+            StringUtil.escapeXmlEntities(getMessage(diagnostic))
+                .replace("\r\n", "\n").replace('\r', '\n').replace("\n", "<br>")
     }
 
     override val clientCapabilities: ClientCapabilities

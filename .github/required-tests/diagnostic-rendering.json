@@ -1,0 +1,9 @@
+{
+  "com.github.biomejs.intellijbiome.lsp.BiomeDiagnosticsTest": [
+    "testAbsentCodeRendersWithoutSuffix",
+    "testStringCodeRendersInMessageAndTooltip",
+    "testIntegerAndZeroCodesRenderInMessageAndTooltip",
+    "testTooltipEscapesMessageAndCodeWithoutChangingPlainMessage",
+    "testTooltipNormalizesAllLineEndings"
+  ]
+}
