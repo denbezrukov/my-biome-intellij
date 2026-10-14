@@ -65,15 +65,7 @@ abstract class BiomeSharedDaemonFixtureTestCase(private val biomeVersion: String
         waitUntilFileOpenedByLspServer(project, source, timeout = 20)
         // Establish initial document readiness before testing restart; never reopen
         // either file after that action.
-        try {
-            events.awaitDiagnostics(source, timeout = 5)
-        } catch (_: AssertionError) {
-            println("Initial readiness control: reopening the primary file once")
-            FileEditorManager.getInstance(project).closeFile(source)
-            myFixture.configureFromExistingVirtualFile(source)
-            waitUntilFileOpenedByLspServer(project, source, timeout = 20)
-            events.awaitDiagnostics(source)
-        }
+        awaitInitialReadiness(source, project, myFixture, events)
         val original = servers().single { it.descriptor.roots.single() == root }
         assertEquals(biomeVersion, original.initializeResult?.serverInfo?.version)
         formatAndAssert()
