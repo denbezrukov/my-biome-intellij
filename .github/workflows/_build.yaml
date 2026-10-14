@@ -18,6 +18,9 @@ on:
       version:
         value: ${{ jobs.build-plugin.outputs.version }}
         description: 'Version of the built plugin'
+      sha256:
+        value: ${{ jobs.build-plugin.outputs.sha256 }}
+        description: SHA256 of the built plugin ZIP
       nightly:
         value: ${{ inputs.nightly }}
         description: "Whether or not the build is a nightly build"
@@ -28,6 +31,7 @@ jobs:
     runs-on: depot-ubuntu-24.04-arm-16
     outputs:
       version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,6 +59,15 @@ jobs:
 
       - name: Build
         run: ./gradlew buildPlugin
+
+      - name: Record built archive checksum
+        id: archive
+        shell: bash
+        env:
+          PLUGIN_ARCHIVE: build/distributions/intellij-biome-${{ steps.version.outputs.version }}.zip
+        run: |
+          sha256=$(sha256sum "$PLUGIN_ARCHIVE" | cut -d ' ' -f1)
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Cache gradle.properties
         if: ${{ inputs.artifact }}

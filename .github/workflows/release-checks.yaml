@@ -16,6 +16,7 @@ jobs:
       - uses: ./.github/actions/setup
       - run: python3 -m pip install PyYAML==6.0.3
       - run: python3 .github/scripts/test-release-review.py
+      - run: python3 .github/scripts/test-release-artifact.py
       - name: Check signing and publication archive selection
         run: >-
           ./gradlew inspectPublicationInput

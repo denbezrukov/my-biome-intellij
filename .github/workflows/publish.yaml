@@ -25,10 +25,36 @@ jobs:
       nightly: ${{ inputs.nightly }}
       artifact: true
 
+  validate-download:
+    name: Validate downloaded plugin archive
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Biome-${{ needs.build.outputs.version }}.zip
+          path: build/downloaded-release
+      - name: Validate downloaded archive
+        id: validate-archive
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-${{ needs.build.outputs.version }}
+          path: build/release-record.json
+          if-no-files-found: error
+
   publish-jetbrains:
     if: inputs.publish
     name: Publish to JetBrains Marketplace
-    needs: [ build ]
+    needs: [ build, validate-download ]
     runs-on: ubuntu-24.04
     environment: intellij-plugin
     steps:
@@ -60,6 +86,17 @@ jobs:
           test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
           unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
 
+      - name: Validate downloaded archive
+        id: validate-archive
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
+
       - name: Publish Plugin
         env:
           PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
@@ -71,7 +108,7 @@ jobs:
   publish-github-release:
     if: inputs.publish
     name: Publish to GitHub Releases
-    needs: [ build ]
+    needs: [ build, validate-download ]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -92,6 +129,17 @@ jobs:
         run: |
           test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
           unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
+
+      - name: Validate downloaded archive
+        id: validate-archive
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: >-
+          python3 .github/scripts/release-artifact.py validate
+          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
+          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
+          --record build/release-record.json
 
       - name: Generate release notes
         id: release-notes
