@@ -1,6 +1,4 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
-import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
-import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
 val remoteRobotVersion = "0.11.21"
 val testPlatformKotlinVersion = "2.2.20"
@@ -93,18 +91,18 @@ intellijPlatform {
 
   pluginVerification {
     failureLevel = listOf(
-      VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
-      VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
-      VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
-      VerifyPluginTask.FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
     )
     ides {
       val minimumPath = providers.gradleProperty("minimumIdePath")
       if (minimumPath.isPresent) local(minimumPath.get())
-      else create(IntelliJPlatformType.WebStorm, "2025.3") { useInstaller = false }
+      else create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.WebStorm, "2025.3") { useInstaller = false }
       val currentPath = providers.gradleProperty("currentIdePath")
       if (currentPath.isPresent) local(currentPath.get())
-      else create(IntelliJPlatformType.WebStorm, "2026.2.3")
+      else create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.WebStorm, "2026.2.3")
     }
   }
 }
