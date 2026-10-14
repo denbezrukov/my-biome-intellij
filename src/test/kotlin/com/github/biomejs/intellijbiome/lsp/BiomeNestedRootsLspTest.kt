@@ -303,13 +303,7 @@ class BiomeNestedRootsLspTest : BiomeLspFixtureTestCase() {
             assertEquals(expected, myFixture.editor.document.text)
             return
         }
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.EDT)
-        val operation = scope.async { withTimeout(15_000) { project.service<BiomeServerService>().format(myFixture.editor.document) } }
-        try {
-            PlatformTestUtil.waitWithEventsDispatching("Formatting timed out", { operation.isCompleted }, 20)
-            runBlocking { operation.await() }
-            assertEquals(expected, myFixture.editor.document.text)
-        } finally { scope.cancel() }
+        formatExistingDocumentAndAssert(file, expected)
     }
 
     private fun formatExistingDocumentAndAssert(file: VirtualFile, expected: String) {
