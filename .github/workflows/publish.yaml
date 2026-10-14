@@ -7,12 +7,7 @@ on:
         type: boolean
         default: true
         required: false
-        description: 'Build a nightly version'
-      publish:
-        type: boolean
-        default: false
-        required: false
-        description: 'Publish the built archive to Marketplace and a GitHub draft'
+        description: 'Publish a nightly build'
 
 permissions:
   contents: read
@@ -52,10 +47,9 @@ jobs:
           if-no-files-found: error
 
   publish-jetbrains:
-    if: inputs.publish
     name: Publish to JetBrains Marketplace
     needs: [ build, validate-download ]
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04-arm-16
     environment: intellij-plugin
     steps:
       - name: Checkout
@@ -106,10 +100,9 @@ jobs:
         run: ./gradlew publishPlugin -PreleaseArchive="build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip" -PpluginVersion="${{ needs.build.outputs.version }}"
 
   publish-github-release:
-    if: inputs.publish
     name: Publish to GitHub Releases
     needs: [ build, validate-download ]
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -153,6 +146,9 @@ jobs:
       - name: Strip tag from release notes
         run: tail -n +3 < CHANGES.md > RELEASE_NOTES.md
 
+      - name: Rename artifact
+        run: mv "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip" biome.zip
+
       - name: Publish extension to GitHub Releases
         uses: softprops/action-gh-release@v1
         with:
@@ -160,5 +156,5 @@ jobs:
           body_path: RELEASE_NOTES.md
           prerelease: ${{ needs.build.outputs.nightly == 'true' }}
           draft: true
-          files: build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip
+          files: biome.zip
           tag_name: ${{ needs.build.outputs.nightly == 'true' && github.ref || format('v{0}', needs.build.outputs.version) }}
