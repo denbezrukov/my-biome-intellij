@@ -1,0 +1,24 @@
+name: Release workflow checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: python3 -m pip install PyYAML==6.0.3
+      - run: python3 .github/scripts/test-release-review.py
+      - name: Check signing and publication archive selection
+        run: >-
+          ./gradlew inspectPublicationInput
+          -I .github/scripts/check-publication-input.gradle
+          -PreleaseArchive=build/downloaded-release/intellij-biome-1.10.1.zip
+          --no-configuration-cache --console=plain

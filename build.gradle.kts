@@ -101,6 +101,15 @@ tasks {
     gradleVersion = providers.gradleProperty("gradleVersion").get()
   }
 
+  providers.gradleProperty("releaseArchive").orNull?.let { path ->
+    val downloadedArchive = layout.projectDirectory.file(path)
+    signPlugin { archiveFile.set(downloadedArchive) }
+    publishPlugin {
+      archiveFile.set(signPlugin.map { signer ->
+        if (signer.onlyIf.isSatisfiedBy(signer)) signer.signedArchiveFile.get() else downloadedArchive
+      })
+    }
+  }
   test {
     useJUnitPlatform()
   }
