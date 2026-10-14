@@ -47,9 +47,7 @@ class BiomeConfigurable(internal val project: Project) :
 
     override fun apply() {
         createComponent()
-        if (manualConfiguration.isSelected) {
-            validateConfigPath(configPathField)?.let { throw ConfigurationException(it.message) }
-        }
+        validateConfigPath(configPathField)?.let { throw ConfigurationException(it.message) }
         super.apply()
     }
 
@@ -118,8 +116,8 @@ class BiomeConfigurable(internal val project: Project) :
                         { settings.configPath },
                         { settings.configPath = it.ifBlank { "" } },
                     )
-                        .validationOnInput { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
-                        .validationOnApply { if (manualConfiguration.isSelected) validateConfigPath(it) else null }
+                        .validationOnInput { validateConfigPath(it) }
+                        .validationOnApply { validateConfigPath(it) }
                         .comment(BiomeBundle.message("biome.config.path.help"))
                         .component
                 }.visibleIf(manualConfiguration.selected)
@@ -240,7 +238,7 @@ class BiomeConfigurable(internal val project: Project) :
     }
 
     private fun validateConfigPath(field: TextFieldWithBrowseButton): ValidationInfo? {
-        if (field.text.isBlank()) return null
+        if (!manualConfiguration.isSelected || field.text.isBlank()) return null
 
         val valid = try {
             val path = Path(field.text)
