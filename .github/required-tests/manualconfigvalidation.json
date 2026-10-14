@@ -5,6 +5,12 @@
     "testBlankManualPathCanApply",
     "testHiddenInvalidInputDoesNotBlockAutomaticMode",
     "testHiddenInvalidInputDoesNotBlockDisabledMode",
-    "testNewManualSelectionIsValidatedBeforeApplyingMode"
+    "testNewManualSelectionIsValidatedBeforeApplyingMode",
+    "testCustomJsonAndJsoncFilesCanApply",
+    "testRelativeFilesAndDirectoriesResolveAgainstProjectRoot",
+    "testRelativeConfigCanResolveAgainstSecondaryContentRoot",
+    "testRelativeConfigCannotResolveOnlyAgainstIdeWorkingDirectory",
+    "testDefaultProjectAcceptsRelativeConfigWithoutResolvingIt",
+    "testDefaultProjectRejectsMissingAbsoluteAndMalformedPaths"
   ]
 }

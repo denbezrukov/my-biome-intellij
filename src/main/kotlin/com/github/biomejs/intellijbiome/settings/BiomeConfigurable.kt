@@ -9,6 +9,7 @@ import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.options.ConfigurationException
+import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
@@ -216,6 +217,9 @@ class BiomeConfigurable(internal val project: Project) :
             }.enabledIf(!disabledConfiguration.selected)
 
             onApply {
+                // The default project (Welcome screen / "Settings for New Projects") has no language servers to restart.
+                if (project.isDefault) return@onApply
+
                 biomeServerService.restartBiomeServer()
                 biomeServerService.notifyRestart()
             }
@@ -240,11 +244,21 @@ class BiomeConfigurable(internal val project: Project) :
 
         val valid = try {
             val path = Path(field.text)
+            // A relative setting for future projects has no filesystem base to validate yet.
+            if (!path.isAbsolute && project.isDefault) return null
+            val paths = if (path.isAbsolute) listOf(path) else {
+                project.getBaseDirectories().map { it.toNioPath().resolve(path) }
+            }
+            if (paths.isEmpty()) return null
             val configNames = listOf("biome.json", "biome.jsonc")
-            when {
-                Files.isRegularFile(path) -> path.fileName.toString() in configNames
-                Files.isDirectory(path) -> configNames.any { Files.isRegularFile(path.resolve(it)) }
-                else -> false
+            paths.any { candidate ->
+                when {
+                    Files.isRegularFile(candidate) -> candidate.fileName.toString().let {
+                        it.endsWith(".json") || it.endsWith(".jsonc")
+                    }
+                    Files.isDirectory(candidate) -> configNames.any { Files.isRegularFile(candidate.resolve(it)) }
+                    else -> false
+                }
             }
         } catch (_: InvalidPathException) {
             false
