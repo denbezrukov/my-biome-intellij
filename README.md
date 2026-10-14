@@ -1,13 +1,8 @@
 # Biome - IntelliJ Plugin
 
-[![IntelliJ IDEA Ultimate Version](https://img.shields.io/badge/IntelliJ%20IDEA%20Ultimate-2024.3-374151.svg?labelcolor=000&logo=intellij-idea&labelColor=black)](https://www.jetbrains.com/idea/)
-[![WebStorm Version](https://img.shields.io/badge/WebStorm-2024.3-1F3263.svg?labelcolor=000&logo=webstorm&labelColor=black)](https://www.jetbrains.com/webstorm/)
-[![AppCode Version](https://img.shields.io/badge/AppCode-2024.3-2380B0.svg?labelcolor=000&logo=appcode&labelColor=black)](https://www.jetbrains.com/objc/)
-[![PhpStorm Version](https://img.shields.io/badge/PhpStorm-2024.3-953D8C.svg?labelcolor=000&logo=phpstorm&labelColor=black)](https://www.jetbrains.com/phpstorm/)
-[![RubyMine Version](https://img.shields.io/badge/RubyMine-2024.3-A11523.svg?labelcolor=000&logo=ruby&labelColor=black)](https://www.jetbrains.com/ruby/)
+Minimum IDE build: **253 (2025.3)**. The project compiles against WebStorm 2025.3; see [IDE requirements](#ide-requirements).
 
-[Biome](https://biomejs.dev/) is a powerful tool designed to enhance your development experience.
-This plugin integrates seamlessly with many [JetBrains IDE's](#supported-ides) to provide the following capabilities.
+[Biome](https://biomejs.dev/) formats and lints code. This plugin provides the following features in [compatible JetBrains IDEs](#ide-requirements).
 
 - 💡 See lints while you type
 - 👨‍💻 Apply code fixes
@@ -32,6 +27,14 @@ To install the Biome IntelliJ plugin, head over to the [official plugin page](ht
 1. Download the plugin .zip from the *releases* tab.
 2. Press <kbd>⌘Cmd + ,</kbd> to open the IDE settings and then select *Plugins*.
 3. On the Plugins page, click the *Settings* button and then click *Install Plugin from Disk…*.
+
+### From source
+
+1. Check out the revision you want to test and run `./gradlew buildPlugin` with JDK 21.
+2. Locate `build/distributions/intellij-biome-VERSION.zip`, where `VERSION` is `pluginVersion` in `gradle.properties`.
+3. Open **Settings/Preferences > Plugins**, use the gear menu, and choose **Install Plugin from Disk…**. Select the plugin ZIP and restart the IDE if prompted.
+
+For an Actions artifact, extract the outer archive first and select the plugin ZIP inside it. A GitHub release asset can be installed directly.
 
 ## Getting Started
 ### Biome Resolution
@@ -60,19 +63,9 @@ To enable formatting, open Biome settings and enable **LSP-based Code Formatting
 If you want to format code on save, navigate to **Actions on Save** settings and enable **Reformat Code**, specifying the desired file types.
 
 
-### Supported IDEs
+### IDE requirements
 
-This plugin is currently supported in the following IDEs:
-
-- [![IntelliJ IDEA Ultimate Version](https://img.shields.io/badge/IntelliJ%20IDEA%20Ultimate-2024.3-374151.svg?labelcolor=000&logo=intellij-idea&labelColor=black)](https://www.jetbrains.com/idea/)
-
-- [![WebStorm Version](https://img.shields.io/badge/WebStorm-2024.3-1F3263.svg?labelcolor=000&logo=webstorm&labelColor=black)](https://www.jetbrains.com/webstorm/)
-
-- [![AppCode Version](https://img.shields.io/badge/AppCode-2024.3-2380B0.svg?labelcolor=000&logo=appcode&labelColor=black)](https://www.jetbrains.com/objc/)
-
-- [![PhpStorm Version](https://img.shields.io/badge/PhpStorm-2024.3-953D8C.svg?labelcolor=000&logo=phpstorm&labelColor=black)](https://www.jetbrains.com/phpstorm/)
-
-- [![RubyMine Version](https://img.shields.io/badge/RubyMine-2024.3-A11523.svg?labelcolor=000&logo=ruby&labelColor=black)](https://www.jetbrains.com/ruby/)
+The plugin requires IDE build **253 (2025.3)** or newer, the Ultimate platform module, and JavaScript support. The configured build SDK is WebStorm 2025.3. The descriptor currently has no upper build limit; that does not establish compatibility with every later IDE release or every JetBrains product.
 
 ## Usage
 
