@@ -71,9 +71,13 @@ jobs:
           path: build/distributions/intellij-biome-${{ steps.version.outputs.version }}.zip
 
   regression-tests:
-    name: Plugin regression tests
+    name: Plugin regression tests (${{ matrix.task }})
     # IDE runtime regression coverage is validated on Linux x64.
     runs-on: depot-ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [test, testCurrentIde]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -85,13 +89,13 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.5.2 --activate
       - name: Run plugin regression tests
-        run: ./gradlew test --console=plain
+        run: ./gradlew ${{ matrix.task }} --console=plain
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-regression-results
+          name: plugin-regression-results-${{ matrix.task }}
           path: |
-            build/test-results/test
-            build/reports/tests/test
+            build/test-results/${{ matrix.task }}
+            build/reports/tests/${{ matrix.task }}
           if-no-files-found: error

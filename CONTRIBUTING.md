@@ -51,6 +51,24 @@ The test task uses the SDK's JetBrains Runtime and a separate Biome daemon cache
 for each checkout and runtime task. Tag Remote Robot tests with `remote-robot`;
 they require a running IDE and are excluded from the headless suite.
 
+### Current IDE runtime tests
+
+The same headless suite also runs on WebStorm 2026.2.3 (build `WS-262.10968.77`):
+
+```sh
+./gradlew testCurrentIde
+```
+
+The default `test` task uses WebStorm 2025.3 (`WS-253.28294.332`). The runtime tests
+check the IDE build and the loaded Biome plugin. Both tasks use separate Biome
+daemon caches; plugin compilation and the distributable ZIP use the minimum SDK.
+
+When updating the current runtime in `build.gradle.kts`, update
+`currentIdeVersion`, `currentIdeBuild`, and the `testCurrentIde` platform test
+framework version together. Check the target IDE's bundled plugin dependencies
+and Kotlin runtime, then run both suites. A local IDE can be selected with
+`-PcurrentIdePath=/path/to/WebStorm`; its build must match `currentIdeBuild`.
+
 ### Remote Robot UI tests
 
 The Remote Robot suite needs the UI test IDE running in another process:
