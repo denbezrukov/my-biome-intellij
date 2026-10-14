@@ -6,6 +6,7 @@ import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.BaseProjectDirectories.Companion.getBaseDirectories
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
@@ -37,6 +38,10 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
         val projectRootDir = project
             .getBaseDirectories()
             .find { VfsUtil.isUnder(file, setOf(it)) } ?: return
+
+        if (!project.isDisposed && BiomeSettings.getInstance(project).usesConfigDiscovery()) {
+            project.service<BiomeConfigDiscoveryService>()
+        }
 
         val root = if (configPath.isNullOrEmpty()) {
             file.findNearestBiomeConfig(projectRootDir)?.parent ?: return
