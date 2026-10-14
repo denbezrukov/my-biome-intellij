@@ -1,0 +1,10 @@
+{
+  "com.github.biomejs.intellijbiome.settings.BiomeManualConfigValidationTest": [
+    "testInvalidManualPathsCannotApply",
+    "testSupportedFilesAndDirectoriesCanApply",
+    "testBlankManualPathCanApply",
+    "testHiddenInvalidInputDoesNotBlockAutomaticMode",
+    "testHiddenInvalidInputDoesNotBlockDisabledMode",
+    "testNewManualSelectionIsValidatedBeforeApplyingMode"
+  ]
+}
