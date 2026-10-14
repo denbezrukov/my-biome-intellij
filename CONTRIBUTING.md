@@ -64,6 +64,8 @@ check.
 
 ### Releasing a stable version
 
+When starting `Publish` for a stable release, uncheck `nightly` and check `publish`.
+
 1. Create a new branch for the release.
    ```shell
    git fetch
@@ -78,9 +80,11 @@ check.
 5. Create a pull request named `chore(release): prepare vX.Y.Z`.
 6. Merge the pull request.
 7. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub. Uncheck `nightly` and check `publish` to upload to Marketplace and create a GitHub draft.
+   the Actions tab in GitHub (uncheck _nightly_).
 
 ### Releasing a nightly version
+
+When starting `Publish` for a nightly release, check both `nightly` and `publish`.
 
 1. Commit your changes to the _main_ branch.
 2. Generate the changelog.
@@ -89,4 +93,4 @@ check.
    ```
 3. Commit and push your changes.
 4. Run the [`Publish`](https://github.com/biomejs/biome-intellij/actions/workflows/publish.yaml) workflow manually from
-   the Actions tab in GitHub. Check both `nightly` and `publish` to upload to Marketplace and create a GitHub draft.
+   the Actions tab in GitHub (check _nightly_).
