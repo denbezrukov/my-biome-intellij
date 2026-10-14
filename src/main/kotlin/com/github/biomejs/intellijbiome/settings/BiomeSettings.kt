@@ -19,14 +19,14 @@ class BiomeSettings :
             state.executablePath = value
         }
     var configPath: String
-        get() = state.configPath ?: ""
+        get() = state.configPath?.takeUnless { it.isBlank() } ?: ""
         set(value) {
             val file = File(value)
             if (file.isFile) {
                 state.configPath = file.parentFile.path
                 return
             }
-            state.configPath = value
+            state.configPath = if (value.isBlank()) "" else value
         }
 
     var supportedExtensions: MutableList<String>
