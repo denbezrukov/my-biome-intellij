@@ -54,8 +54,6 @@ If you want to format code on save, navigate to **Actions on Save** settings and
 
 The plugin requires IDE build **253 (2025.3)** or newer, the Ultimate platform module, and JavaScript support. The configured build SDK is WebStorm 2025.3. The descriptor currently has no upper build limit; that does not establish compatibility with every later IDE release or every JetBrains product.
 
-The repository does not currently run a product compatibility matrix.
-
 ## Usage
 
 Biome CLI comes with many commands and options, so you can use only what you need.
