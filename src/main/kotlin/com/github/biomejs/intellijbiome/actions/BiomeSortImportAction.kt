@@ -27,13 +27,7 @@ class BiomeSortImportAction : AnAction(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(event: AnActionEvent) {
-        val project = event.project
-        val editor = event.getData(CommonDataKeys.EDITOR)
-        val file = editor?.let { FileDocumentManager.getInstance().getFile(it.document) }
-        event.presentation.isEnabledAndVisible = project != null && !project.isDisposed &&
-            editor != null && !editor.isDisposed && editor.document.isWritable &&
-            file != null && file.isValid && !file.isDirectory &&
-            BiomeSettings.getInstance(project).let { it.isEnabled() && it.fileSupported(file) }
+        event.presentation.isEnabledAndVisible = isBiomeManualActionAvailable(event)
     }
 
     override fun actionPerformed(event: AnActionEvent) {
