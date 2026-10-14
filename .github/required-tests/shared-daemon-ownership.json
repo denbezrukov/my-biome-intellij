@@ -1,0 +1,10 @@
+{
+  "com.github.biomejs.intellijbiome.lsp.BiomeSharedDaemonLspTest": [
+    "testNodeRestartPreservesSharedDaemonAndCleansUpProxies",
+    "testNativeRestartPreservesSharedDaemonAndCleansUpProxies"
+  ],
+  "com.github.biomejs.intellijbiome.lsp.LegacyBiomeSharedDaemonLspTest": [
+    "testNodeStopPreservesLegacySharedDaemonAndCleansUpProxies",
+    "testNativeStopPreservesLegacySharedDaemonAndCleansUpProxies"
+  ]
+}
