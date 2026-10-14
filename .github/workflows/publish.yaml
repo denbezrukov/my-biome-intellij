@@ -1,4 +1,4 @@
-name: Publish
+name: Release artifact validation
 
 on:
   workflow_dispatch:
@@ -7,23 +7,32 @@ on:
         type: boolean
         default: true
         required: false
-        description: 'Publish a nightly build'
+        description: 'Build a nightly version'
+      runner:
+        type: choice
+        default: depot-ubuntu-24.04-arm-16
+        required: true
+        description: 'Runner for the build and download validation'
+        options:
+          - depot-ubuntu-24.04-arm-16
+          - ubuntu-24.04
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build
+    name: Build plugin archive
     uses: ./.github/workflows/_build.yaml
     with:
       nightly: ${{ inputs.nightly }}
       artifact: true
+      runner: ${{ inputs.runner }}
 
   validate-download:
-    name: Validate downloaded plugin archive
+    name: Validate artifact transport
     needs: [build]
-    runs-on: depot-ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -45,116 +54,3 @@ jobs:
           name: release-record-${{ needs.build.outputs.version }}
           path: build/release-record.json
           if-no-files-found: error
-
-  publish-jetbrains:
-    name: Publish to JetBrains Marketplace
-    needs: [ build, validate-download ]
-    runs-on: depot-ubuntu-24.04-arm-16
-    environment: intellij-plugin
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4.2.0
-        with:
-          gradle-home-cache-cleanup: true
-
-      - name: Download the artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Biome-${{ needs.build.outputs.version }}.zip
-          path: build/downloaded-release
-
-      - name: Inspect downloaded archive
-        id: inspect-archive
-        run: |
-          test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-          unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-
-      - name: Validate downloaded archive
-        id: validate-archive
-        env:
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
-        run: >-
-          python3 .github/scripts/release-artifact.py validate
-          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
-          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
-          --record build/release-record.json
-
-      - name: Publish Plugin
-        env:
-          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
-          CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
-          PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
-          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew publishPlugin -PreleaseArchive="build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip" -PpluginVersion="${{ needs.build.outputs.version }}"
-
-  publish-github-release:
-    name: Publish to GitHub Releases
-    needs: [ build, validate-download ]
-    runs-on: depot-ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download the artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Biome-${{ needs.build.outputs.version }}.zip
-          path: build/downloaded-release
-
-      - name: Inspect downloaded archive
-        id: inspect-archive
-        run: |
-          test -s "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-          unzip -t "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip"
-
-      - name: Validate downloaded archive
-        id: validate-archive
-        env:
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          RELEASE_SHA256: ${{ needs.build.outputs.sha256 }}
-        run: >-
-          python3 .github/scripts/release-artifact.py validate
-          --archive "build/downloaded-release/intellij-biome-$RELEASE_VERSION.zip"
-          --version "$RELEASE_VERSION" --sha256 "$RELEASE_SHA256"
-          --record build/release-record.json
-
-      - name: Generate release notes
-        id: release-notes
-        uses: orhun/git-cliff-action@v2
-        with:
-          config: cliff.toml
-          args: -vv --latest --strip header e71479100d4ed81b3e9c26881c38a0ddb7da31eb..
-        env:
-          OUTPUT: CHANGES.md
-
-      - name: Strip tag from release notes
-        run: tail -n +3 < CHANGES.md > RELEASE_NOTES.md
-
-      - name: Rename artifact
-        run: mv "build/downloaded-release/intellij-biome-${{ needs.build.outputs.version }}.zip" biome.zip
-
-      - name: Publish extension to GitHub Releases
-        uses: softprops/action-gh-release@v1
-        with:
-          name: "v${{ needs.build.outputs.version }}"
-          body_path: RELEASE_NOTES.md
-          prerelease: ${{ needs.build.outputs.nightly == 'true' }}
-          draft: true
-          files: biome.zip
-          tag_name: ${{ needs.build.outputs.nightly == 'true' && github.ref || format('v{0}', needs.build.outputs.version) }}
