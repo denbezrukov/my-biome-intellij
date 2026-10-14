@@ -1,0 +1,33 @@
+{
+  "com.github.biomejs.intellijbiome.lsp.BiomeSaveActionsTest": [
+    "testSaveAllContinuesAfterFileFailure",
+    "testSaveAllContinuesAfterFileTimeout",
+    "testTypingDiscardsStaleResponseAndRemainingFeatures",
+    "testCancellationBeforeWriteDoesNotMutate",
+    "testCancellationWhileWriteIsQueuedDoesNotMutate",
+    "testCommandBearingActionDoesNotApplyItsEdit",
+    "testEnabledFeaturesRunInOrderAndPersist",
+    "testOrganizeImportsPersistsRealServerEdits",
+    "testSavePreservesLfBytes",
+    "testSavePreservesCrLfBytes",
+    "testPartialSuccessPersistsAfterTimeout",
+    "testMissingServerIsNoOp"
+  ],
+  "com.github.biomejs.intellijbiome.actions.BiomeSaveOperationTest": [
+    "testCompletionAndFailure",
+    "testOwnTimeoutIsRecoverable",
+    "testParentCancellationPropagates",
+    "testOuterTimeoutPropagates",
+    "testPlatformCancellationPropagates",
+    "testPlatformControlFlowPropagates",
+    "testFeatureStagesShareOneBudget",
+    "testCancellationExceptionFromOperationIsPreserved"
+  ],
+  "com.github.biomejs.intellijbiome.actions.BiomeLegacySaveActionTest": [
+    "testIneligibleDocumentsAreSkipped",
+    "testDisabledPreferencesExecuteNoSaveWork",
+    "testFeatureSnapshotIsStable",
+    "testPlatformCancellationPropagates",
+    "testFileSpecificFailureFeedback"
+  ]
+}
