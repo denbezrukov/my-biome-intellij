@@ -40,6 +40,36 @@ To run the plugin's tests, run the `test` Gradle task.
 ./gradlew test
 ```
 
+### Verify the packaged plugin
+
+The compatibility workflow checks the plugin archive against WebStorm
+`WS-253.28294.332` (2025.3) and `WS-262.10968.77` (2026.2.3):
+
+```sh
+python3 .github/scripts/test-check-compatibility.py
+./gradlew buildPlugin verifyPlugin
+python3 .github/scripts/check-compatibility.py \
+  --archive build/distributions/intellij-biome-VERSION.zip \
+  --version VERSION --reports build/reports/pluginVerifier \
+  --target WS-253.28294.332 --target WS-262.10968.77 \
+  --output build/compatibility-provenance.json
+```
+
+Replace `VERSION` with `pluginVersion` from `gradle.properties`. The report checker
+requires compatible results for both exact builds and checks the packaged plugin
+identity. These checks cover the pinned WebStorm builds; they do not change the
+plugin descriptor's supported build range.
+
+The archive must compile against WebStorm 2025.3 with minimum build 253.
+`buildPlugin` and `verifyPlugin` reject overrides of those compile SDK properties.
+Use `-PminimumIdePath=/path/to/minimum/WebStorm` and
+`-PcurrentIdePath=/path/to/current/WebStorm` for local verifier installations.
+
+When updating a verifier target, change its version in `build.gradle.kts` and its
+exact build in `.github/workflows/_verify.yaml` and this guide. Build a fresh
+archive and rerun both verifier targets. If the current-runtime test lane is
+present, update its matching runtime and framework pins as well.
+
 ## Making changes
 
 1. **Create a branch.** Before making any changes, create a branch to work on.
