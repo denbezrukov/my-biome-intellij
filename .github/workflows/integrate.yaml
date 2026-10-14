@@ -10,3 +10,7 @@ jobs:
   build:
     name: Build
     uses: ./.github/workflows/_build.yaml
+
+  verify-plugin:
+    name: Verify plugin compatibility
+    uses: ./.github/workflows/_verify.yaml

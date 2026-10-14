@@ -90,13 +90,41 @@ intellijPlatform {
   }
 
   pluginVerification {
+    failureLevel = listOf(
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+      org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
+    )
     ides {
-      recommended()
+      val minimumPath = providers.gradleProperty("minimumIdePath")
+      if (minimumPath.isPresent) local(minimumPath.get())
+      else create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.WebStorm, "2025.3") { useInstaller = false }
+      val currentPath = providers.gradleProperty("currentIdePath")
+      if (currentPath.isPresent) local(currentPath.get())
+      else create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.WebStorm, "2026.2.3")
+    }
+  }
+}
+
+// Verifier runtime overrides must not change the SDK used for the archive.
+val requireMinimumCompileSdk by tasks.registering {
+  val platformType = providers.gradleProperty("platformType")
+  val platformVersion = providers.gradleProperty("platformVersion")
+  val sinceBuild = providers.gradleProperty("pluginSinceBuild")
+  inputs.property("platformType", platformType)
+  inputs.property("platformVersion", platformVersion)
+  inputs.property("pluginSinceBuild", sinceBuild)
+  doLast {
+    require(platformType.get() == "WS" && platformVersion.get() == "2025.3" && sinceBuild.get() == "253") {
+      "Compile the verified archive against WebStorm 2025.3 (253); use currentIdePath for the verifier runtime."
     }
   }
 }
 
 tasks {
+  buildPlugin { dependsOn(requireMinimumCompileSdk) }
+  verifyPlugin { dependsOn(requireMinimumCompileSdk) }
   wrapper {
     gradleVersion = providers.gradleProperty("gradleVersion").get()
   }
