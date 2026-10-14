@@ -97,6 +97,10 @@ intellijPlatform {
 }
 
 tasks {
+  wrapper {
+    gradleVersion = providers.gradleProperty("gradleVersion").get()
+  }
+
   providers.gradleProperty("releaseArchive").orNull?.let { path ->
     val downloadedArchive = layout.projectDirectory.file(path)
     signPlugin { archiveFile.set(downloadedArchive) }
@@ -106,10 +110,6 @@ tasks {
       })
     }
   }
-  wrapper {
-    gradleVersion = providers.gradleProperty("gradleVersion").get()
-  }
-
   test {
     useJUnitPlatform()
   }
