@@ -18,6 +18,7 @@
     "testAutomaticVersionStillUsesPackageMetadataWithoutProbing",
     "testSupportedFileRequestsServerStart",
     "testManualV1AndV2ConfigurationTransportIsPreserved",
+    "testManualV1AndV2CommandsUseSelectedSecondContentRoot",
     "testStaleDescriptorNeverStartsAProbeOrServer",
     "testStoppingInitializingServerCancelsProbeAndPreventsLaunch",
     "testStopDuringFinalProcessCreationDoesNotLoseProcessOwnership"

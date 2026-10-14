@@ -14,6 +14,11 @@ import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterRef
 import com.intellij.javascript.nodejs.interpreter.local.NodeJsLocalInterpreter
 import kotlinx.coroutines.runBlocking
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.UIUtil
@@ -110,6 +115,35 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
             start(descriptors.single())
             val arguments = Files.readAllLines(invocationLog).last()
             assertEquals(if (version.startsWith("1.")) "lsp-proxy --config-path $configuredPath" else "lsp-proxy", arguments)
+        }
+    }
+
+    fun testManualV1AndV2CommandsUseSelectedSecondContentRoot() {
+        val secondPath = Files.createTempDirectory("biome-second-content-root")
+        Disposer.register(testRootDisposable) { FileUtil.delete(secondPath.toFile()) }
+        Files.writeString(secondPath.resolve("biome.json"), "{}")
+        Files.writeString(secondPath.resolve("index.js"), "let value = 1;")
+        val secondRoot = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(secondPath)!!
+        secondRoot.refresh(false, true)
+        ModuleRootModificationUtil.addContentRoot(myFixture.module, secondRoot.path)
+        assertTrue("The fixture must retain both content roots", ModuleRootManager.getInstance(myFixture.module).contentRoots.size >= 2)
+        val file = secondRoot.findChild("index.js")!!
+        BiomeSettings.getInstance(project).configPath = secondPath.resolve("biome.json").toString()
+        val configuredPath = BiomeSettings.getInstance(project).configPath
+        assertTrue("The selected content root must differ from the default working directory", secondRoot.path != project.basePath)
+
+        for (version in listOf("1.9.4", "2.2.3")) {
+            descriptors.clear()
+            Files.deleteIfExists(invocationLog)
+            Files.writeString(executable, "#!/bin/sh\nprintf '%s\\t%s\\n' \"\$PWD\" \"\$*\" >> ${quote(invocationLog.toString())}\nif [ \"\$1\" = '--version' ]; then printf 'Version: $version\\n'; else $peerCommand; fi\n")
+            BiomeLspServerSupportProvider().fileOpened(project, file, starter)
+            val descriptor = descriptors.single()
+            assertEquals(listOf(secondRoot), descriptor.roots.toList())
+            start(descriptor)
+            val arguments = if (version.startsWith("1.")) "lsp-proxy --config-path $configuredPath" else "lsp-proxy"
+            assertEquals("Both commands must run in the selected content root for Biome $version",
+                listOf("${secondRoot.path}\t--version", "${secondRoot.path}\t$arguments"),
+                Files.readAllLines(invocationLog))
         }
     }
 

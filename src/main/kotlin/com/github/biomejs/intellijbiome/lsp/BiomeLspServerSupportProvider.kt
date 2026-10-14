@@ -83,10 +83,11 @@ private class BiomeLspServerDescriptor(
 ) : LspServerDescriptor(project, "Biome", root) {
     private val probeRun = if (BiomeSettings.getInstance(project).configurationMode == ConfigurationMode.MANUAL) {
         BiomeTargetRunBuilder(project).getBuilder(executable)
+            .setWorkingDirectory(root.path)
             .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
     } else null
     private val legacyTargetRun = if (probeRun != null && !configPath.isNullOrEmpty()) {
-        BiomeTargetRunBuilder(project).getBuilder(executable).addParameters(listOf(
+        BiomeTargetRunBuilder(project).getBuilder(executable).setWorkingDirectory(root.path).addParameters(listOf(
             ProcessCommandParameter.Value("lsp-proxy"),
             ProcessCommandParameter.Value("--config-path"),
             ProcessCommandParameter.FilePath(Path(configPath)),
@@ -96,6 +97,7 @@ private class BiomeLspServerDescriptor(
     private val targetRun: BiomeTargetRun = run {
         var builder = BiomeTargetRunBuilder(project)
             .getBuilder(executable)
+            .setWorkingDirectory(root.path)
             .addParameters(listOf(ProcessCommandParameter.Value("lsp-proxy")))
 
         // Backward compatibility for v1; `--config-path` is no longer available in v2
