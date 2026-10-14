@@ -1,0 +1,25 @@
+{
+  "com.github.biomejs.intellijbiome.startup.BiomeStartupProbeTest": [
+    "testVersionOutputIdentifiesV1AndV2",
+    "testInvalidVersionAndNonzeroExitRemainFailures",
+    "testMissingExecutableRemainsAFailure",
+    "testVersionDeadlineTerminatesTheProcess",
+    "testVersionCoroutineCancellationIsPreservedAndTerminatesChild",
+    "testPlatformCancellationIsPreservedAndTerminatesChild",
+    "testProjectDisposalTerminatesTheChild",
+    "testNonzeroExitIsPreserved",
+    "testCancellingVersionCollectionTerminatesTheProcess",
+    "testCancellingCollectionTerminatesWrapperDescendants",
+    "testCancellingNodeStyleCollectionTerminatesInterruptIgnoringDescendants",
+    "testProcessExitDuringStateReadIsNotReportedAsAnOrphan",
+    "testCoroutineCancellationTerminatesTheProcess"
+  ],
+  "com.github.biomejs.intellijbiome.startup.BiomeStartupLspTest": [
+    "testAutomaticVersionStillUsesPackageMetadataWithoutProbing",
+    "testSupportedFileRequestsServerStart",
+    "testManualV1AndV2ConfigurationTransportIsPreserved",
+    "testStaleDescriptorNeverStartsAProbeOrServer",
+    "testStoppingInitializingServerCancelsProbeAndPreventsLaunch",
+    "testStopDuringFinalProcessCreationDoesNotLoseProcessOwnership"
+  ]
+}

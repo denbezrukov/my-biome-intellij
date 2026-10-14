@@ -1,6 +1,17 @@
 package com.github.biomejs.intellijbiome.lsp
 
 import com.github.biomejs.intellijbiome.*
+import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
+import com.github.biomejs.intellijbiome.settings.ConfigurationMode
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.util.Computable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.platform.lsp.api.LspServerManager
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
+import java.util.concurrent.TimeUnit
 import com.github.biomejs.intellijbiome.extensions.findNearestBiomeConfig
 import com.github.biomejs.intellijbiome.settings.BiomeConfigurable
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
@@ -46,9 +57,14 @@ class BiomeLspServerSupportProvider : LspServerSupportProvider {
             projectRootDir
         }
 
-        // Finds the Biome executable and check the version using CLI.
+        // Select the executable before SDK startup.
         val executable = biome.binaryPath(root.path, file, false) ?: return
-        val version = runBlocking { biome.versionNumber() }
+        // Manual probes run during cancellable SDK startup. Automatic mode keeps package metadata.
+        val version = if (BiomeSettings.getInstance(project).configurationMode == ConfigurationMode.MANUAL) {
+            null
+        } else {
+            runBlocking { biome.versionNumber() }
+        }
 
         serverStarter.ensureServerStarted(BiomeLspServerDescriptor(project, root, executable, version, configPath))
     }
@@ -65,6 +81,18 @@ private class BiomeLspServerDescriptor(
     version: String?,
     private val configPath: String?,
 ) : LspServerDescriptor(project, "Biome", root) {
+    private val probeRun = if (BiomeSettings.getInstance(project).configurationMode == ConfigurationMode.MANUAL) {
+        BiomeTargetRunBuilder(project).getBuilder(executable)
+            .addParameters(listOf(ProcessCommandParameter.Value("--version"))).build()
+    } else null
+    private val legacyTargetRun = if (probeRun != null && !configPath.isNullOrEmpty()) {
+        BiomeTargetRunBuilder(project).getBuilder(executable).addParameters(listOf(
+            ProcessCommandParameter.Value("lsp-proxy"),
+            ProcessCommandParameter.Value("--config-path"),
+            ProcessCommandParameter.FilePath(Path(configPath)),
+        )).build()
+    } else null
+
     private val targetRun: BiomeTargetRun = run {
         var builder = BiomeTargetRunBuilder(project)
             .getBuilder(executable)
@@ -90,13 +118,63 @@ private class BiomeLspServerDescriptor(
         throw RuntimeException("Not expected to be called because startServerProcess() is overridden")
     }
 
-    override fun startServerProcess(): OSProcessHandler =
-        targetRun.startProcess().also { handler ->
-            // A daemon may serve another project. Stop only this client's proxy.
+    override fun startServerProcess(): OSProcessHandler {
+        val probe = probeRun ?: return targetRun.startProcess().also { handler ->
             handler.setShouldDestroyProcessRecursively(false)
-            // Closing stdin lets a Node wrapper's native proxy disconnect as well.
             (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
         }
+        if (project.isDisposed) throw ProcessCanceledException()
+        val manager = LspServerManager.getInstance(project)
+        // The SDK queues process startup before adding the server in its EDT write action.
+        // A short read action waits for that publication and cannot mistake it for a stale start.
+        val server = ApplicationManager.getApplication().runReadAction(Computable {
+            manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                .find { it.descriptor === this }
+        }) ?: throw ProcessCanceledException()
+        // SDK stop removes this instance from its copy-on-write collection before shutdown.
+        // Poll its supported manager API rather than retaining an internal lifecycle listener.
+        val checkStartupCancellation = {
+            if (manager.getServersForProvider(BiomeLspServerSupportProvider::class.java).none { it === server }) {
+                throw CancellationException("Biome server startup was stopped")
+            }
+        }
+        var pendingHandler: OSProcessHandler? = null
+        return try {
+            val handler = runBlocking {
+                val version = BiomePackage(project).versionNumber(probe, checkStartupCancellation)
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                // Backward compatibility for v1; `--config-path` is no longer available in v2.
+                val handler = (if (version.startsWith("1.")) legacyTargetRun ?: targetRun else targetRun).startProcess()
+                    .also { pendingHandler = it }
+                // Synchronous target preparation can overlap a stop after the preceding guard.
+                currentCoroutineContext().ensureActive()
+                ProgressManager.checkCanceled()
+                if (project.isDisposed) throw ProcessCanceledException()
+                checkStartupCancellation()
+                handler
+            }
+            // Until runBlocking returns successfully, cancellation can discard its result.
+            // The SDK connector takes ownership only after this method returns.
+            // Successful proxies must preserve a daemon shared by another project.
+            // Probes and cancelled startup handlers keep recursive cleanup.
+            handler.setShouldDestroyProcessRecursively(false)
+            (handler as? KillableProcessHandler)?.setShouldKillProcessSoftly(false)
+            pendingHandler = null
+            handler
+        } finally {
+            pendingHandler?.let { handler ->
+                terminateProbeProcess(handler)
+                try {
+                    handler.process.waitFor(1_000, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
+        }
+    }
 
     override fun getFilePath(file: VirtualFile): String =
         targetRun.toTargetPath(file.path)
