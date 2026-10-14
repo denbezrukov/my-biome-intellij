@@ -2,8 +2,6 @@ package com.github.biomejs.intellijbiome.services
 
 import com.github.biomejs.intellijbiome.BiomeBundle
 import com.github.biomejs.intellijbiome.lsp.BiomeLspServerSupportProvider
-import com.intellij.diff.comparison.ComparisonManager
-import com.intellij.diff.comparison.ComparisonPolicy
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.readAction
@@ -12,7 +10,6 @@ import com.intellij.openapi.command.execute
 import com.intellij.openapi.command.undo.BasicUndoableAction
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.command.undo.UnexpectedUndoException
-import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import kotlinx.coroutines.currentCoroutineContext
@@ -145,22 +142,31 @@ class BiomeServerService internal constructor(
 
     private fun applyFormatting(document: Document, file: VirtualFile, edits: List<TextEdit>) {
         val original = document.text
-        val output = StringBuilder(original)
-        edits.asReversed().forEach { edit ->
+        val replacements = edits.map { edit ->
             val range = getRangeInDocument(document, edit.range) ?: return
-            output.replace(range.startOffset, range.endOffset, edit.newText)
+            range to edit.newText
+        }.sortedWith(compareBy({ it.first.startOffset }, { it.first.endOffset }))
+        val output = StringBuilder(original.length)
+        val replacementEnds = IntArray(replacements.size)
+        var offset = 0
+        replacements.forEachIndexed { index, (range, text) ->
+            if (range.startOffset < offset) return
+            output.append(original, offset, range.startOffset).append(text)
+            replacementEnds[index] = output.length
+            offset = range.endOffset
         }
+        output.append(original, offset, original.length)
         // Even an empty edit list describes complete LF output from the normalized document.
-        // Normalize after reconstruction because a CRLF pair can cross an edit boundary.
         val rawOutput = output.toString()
-        val normalizedOutput = StringUtil.convertLineSeparators(rawOutput)
-        if (original != normalizedOutput) {
-            val indicator = ProgressManager.getInstance().progressIndicator ?: EmptyProgressIndicator()
-            val changes = ComparisonManager.getInstance().compareChars(
-                original, normalizedOutput, ComparisonPolicy.DEFAULT, indicator)
-            changes.asReversed().forEach { change ->
-                document.replaceString(change.startOffset1, change.endOffset1,
-                    normalizedOutput.substring(change.startOffset2, change.endOffset2))
+        replacements.indices.reversed().forEach { index ->
+            val (range, text) = replacements[index]
+            // Keep the LF when a CRLF pair crosses a replacement boundary. Original
+            // document text already uses LF, so only an inserted trailing CR can split it.
+            val normalized = StringUtil.convertLineSeparators(
+                if (text.endsWith('\r') && rawOutput.getOrNull(replacementEnds[index]) == '\n') text.dropLast(1)
+                else text)
+            if (!StringUtil.equals(range.subSequence(original), normalized)) {
+                document.replaceString(range.startOffset, range.endOffset, normalized)
             }
         }
         StringUtil.detectSeparators(rawOutput)?.let { applyLineSeparator(document, file, it.separatorString) }

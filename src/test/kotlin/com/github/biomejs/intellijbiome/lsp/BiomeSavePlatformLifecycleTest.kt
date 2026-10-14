@@ -83,6 +83,32 @@ class BiomeSavePlatformLifecycleTest : BiomeLspFixtureTestCase() {
     fun testCurrentFormatterConvertsCrLfToLfWithSpaceOnlyEdits() =
         checkCurrentFormatterLfOutput("const value=1;\nconsole.log(value);\n", expectTextEdits = true)
 
+    fun testLargeFormattingResponseDoesNotRequireWholeDocumentDiff() {
+        val config = myFixture.findFileInTempDir("biome.json") ?: error("Missing config")
+        WriteCommandAction.runWriteCommandAction(project) {
+            com.intellij.openapi.vfs.VfsUtil.saveText(config, """{"formatter":{"lineEnding":"lf"},"linter":{"enabled":false}}""")
+        }
+        val events = RuntimeGateEvents(project, testRootDisposable)
+        val document = openDocuments().last()
+        val file = FileDocumentManager.getInstance().getFile(document)!!
+        events.awaitDiagnostics(file, "2.5.15")
+        val input = (0 until 12_000).joinToString("") { "const value$it = {\"name\":\"value$it\",\"active\":true};\n" }
+        val expected = (0 until 12_000).joinToString("") { "const value$it = { name: \"value$it\", active: true };\n" }
+        assertTrue("The regression must stay below Biome's default file limit", input.length < 1_048_576)
+        // Biome 2.5.15 produces this output. Keep server diff latency outside this
+        // regression: the plugin must apply a valid response below the file limit.
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> =
+                    listOf(TextEdit(Range(Position(0, 0), Position(12_000, 0)), expected))
+            }), testRootDisposable)
+        WriteCommandAction.runWriteCommandAction(project) { document.setText(input) }
+        BiomeSettings.getInstance(project).formatOnSave = true
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals(expected, document.text)
+        assertEquals(expected, diskText(document))
+    }
+
     private fun checkCurrentFormatterLfOutput(input: String, expectTextEdits: Boolean) {
         val config = myFixture.findFileInTempDir("biome.json") ?: error("Missing config")
         WriteCommandAction.runWriteCommandAction(project) {
@@ -185,6 +211,24 @@ class BiomeSavePlatformLifecycleTest : BiomeLspFixtureTestCase() {
         assertEquals(input, diskText(document))
         undo.redo(editor)
         assertEquals(input, document.text)
+        assertEquals(input.replace("\n", "\r\n"), diskText(document))
+    }
+
+    fun testAdjacentCrLfEditsDoNotInsertBlankLines() {
+        val document = openDocuments().last()
+        val input = "const value = 1;\nconsole.log(value);\n"
+        project.replaceService(BiomeServerService::class.java, BiomeServerService(project,
+            object : BiomeLspRequests by DefaultBiomeLspRequests {
+                override suspend fun formatting(server: LspServer, params: DocumentFormattingParams): List<TextEdit> =
+                    listOf(
+                        TextEdit(Range(Position(0, 17), Position(1, 0)), "\n"),
+                        TextEdit(Range(Position(0, 16), Position(0, 17)), "\r"),
+                    )
+            }), testRootDisposable)
+        BiomeSettings.getInstance(project).formatOnSave = true
+        WriteCommandAction.runWriteCommandAction(project) { document.setText("const value = 1; \nconsole.log(value);\n") }
+        saveAndAwaitCompletion(myFixture, listOf(document))
+        assertEquals("CRLF split between adjacent replacements must normalize once", input, document.text)
         assertEquals(input.replace("\n", "\r\n"), diskText(document))
     }
 

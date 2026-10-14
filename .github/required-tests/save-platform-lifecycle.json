@@ -2,8 +2,10 @@
   "com.github.biomejs.intellijbiome.lsp.BiomeSavePlatformLifecycleTest": [
     "testCurrentFormatterConvertsCrLfToLfWithoutTextEdits",
     "testCurrentFormatterConvertsCrLfToLfWithSpaceOnlyEdits",
+    "testLargeFormattingResponseDoesNotRequireWholeDocumentDiff",
     "testNullFormattingResponsePreservesCrLfBytes",
     "testSplitCrLfEditsDoNotInsertBlankLines",
+    "testAdjacentCrLfEditsDoNotInsertBlankLines",
     "testUsesPlatformDocumentUpdatingHook",
     "testCrLfOnlyEditPersists",
     "testLfOnlyEditPersists",
