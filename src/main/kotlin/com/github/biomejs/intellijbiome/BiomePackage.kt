@@ -1,6 +1,7 @@
 package com.github.biomejs.intellijbiome
 
 import com.github.biomejs.intellijbiome.extensions.runProcessFuture
+import com.github.biomejs.intellijbiome.extensions.terminateProbeProcess
 import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.github.biomejs.intellijbiome.settings.ConfigurationMode
 import com.intellij.javascript.nodejs.interpreter.NodeJsInterpreterManager
@@ -9,6 +10,17 @@ import com.intellij.javascript.nodejs.util.NodePackageDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import com.intellij.execution.ExecutionException
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 import java.nio.file.Paths
 
 
@@ -49,6 +61,45 @@ class BiomePackage(private val project: Project) {
             ConfigurationMode.AUTOMATIC -> null // Let Biome find the config file
             ConfigurationMode.MANUAL -> settings.configPath
         }
+    }
+
+    /** Collects the version of precisely the executable and target selected by the caller. */
+    suspend fun versionNumber(targetRun: BiomeTargetRun, checkStartupCancellation: () -> Unit = {}): String {
+        checkProbeCancellation(checkStartupCancellation)
+        // SDK target preparation is synchronous; the deadline bounds result collection.
+        val process = targetRun.startProcess()
+        try {
+            val collection = runProcessFuture(process)
+            val result = withTimeoutOrNull(5_000) {
+                while (!collection.isDone) {
+                    checkProbeCancellation(checkStartupCancellation)
+                    delay(25)
+                }
+                checkProbeCancellation(checkStartupCancellation)
+                collection.await()
+            } ?: throw ExecutionException("Biome version probe exceeded 5000 ms")
+            val output = result.processOutput
+            if (output.exitCode != 0) {
+                throw ExecutionException("Biome version probe exited with code ${output.exitCode}: ${output.stderr}")
+            }
+            return versionRegex.find(output.stdout)?.value
+                ?: throw ExecutionException("Biome executable returned an invalid version")
+        } finally {
+            // Cleanup must survive parent cancellation, but never wait indefinitely for a child.
+            withContext(NonCancellable + Dispatchers.IO) {
+                if (process.process.isAlive) {
+                    terminateProbeProcess(process)
+                    process.process.waitFor(1_000, TimeUnit.MILLISECONDS)
+                }
+            }
+        }
+    }
+
+    private suspend fun checkProbeCancellation(checkStartupCancellation: () -> Unit) {
+        coroutineContext.ensureActive()
+        ProgressManager.checkCanceled()
+        if (project.isDisposed) throw ProcessCanceledException()
+        checkStartupCancellation()
     }
 
     suspend fun versionNumber(): String? {
@@ -92,20 +143,11 @@ class BiomePackage(private val project: Project) {
             return null
         }
 
-        val processHandler =
-            BiomeTargetRunBuilder(project)
-                .getBuilder(binaryPath)
-                .addParameters(listOf(ProcessCommandParameter.Value("--version")))
-                .build()
-                .startProcess()
-
-        return runCatching {
-            val result = runProcessFuture(processHandler).await()
-            val processOutput = result.processOutput
-            val stdout = processOutput.stdout
-            val matchResult = versionRegex.find(stdout)
-            return matchResult?.value
-        }.getOrNull()
+        val targetRun = BiomeTargetRunBuilder(project)
+            .getBuilder(binaryPath)
+            .addParameters(listOf(ProcessCommandParameter.Value("--version")))
+            .build()
+        return versionNumber(targetRun)
     }
 
     companion object {
