@@ -1,0 +1,6 @@
+{
+  "com.github.biomejs.intellijbiome.launcher.BiomeNativeReaderTest": [
+    "testNodeReaderFinishesAfterProxyExitWithInheritedPipes",
+    "testNodeReaderFinishesAfterProxyDestroyWithInheritedPipes"
+  ]
+}
