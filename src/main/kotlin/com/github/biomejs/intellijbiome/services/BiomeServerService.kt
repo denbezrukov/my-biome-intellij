@@ -118,7 +118,7 @@ class BiomeServerService internal constructor(
             if (edits == null && server.state != LspServerState.Running) {
                 return if (changed) Outcome.PartiallyChanged else Outcome.Unavailable
             }
-            if (!edits.isNullOrEmpty()) {
+            if (edits != null) {
                 if (!applyIfCurrent(document, file, stamp, commandName) {
                         val before = document.text
                         val separator = file.detectedLineSeparator
