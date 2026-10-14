@@ -1,0 +1,37 @@
+name: Verify packaged plugin
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Test compatibility report checks
+        run: python3 .github/scripts/test-check-compatibility.py
+      - name: Build and verify the minimum-compiled archive
+        run: |
+          rm -rf build/reports/pluginVerifier
+          ./gradlew buildPlugin verifyPlugin --console=plain
+      - name: Require exact packaged identity and verifier verdicts
+        run: |
+          version=$(sed -n 's/^pluginVersion=//p' gradle.properties)
+          python3 .github/scripts/check-compatibility.py \
+            --archive "build/distributions/intellij-biome-$version.zip" \
+            --version "$version" --reports build/reports/pluginVerifier \
+            --target WS-253.28294.332 --target WS-262.10968.77 \
+            --output build/compatibility-provenance.json
+      - name: Upload verifier reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-verifier-reports
+          path: |
+            build/reports/pluginVerifier/
+            build/compatibility-provenance.json
