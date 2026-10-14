@@ -21,10 +21,10 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.util.concurrency.AppExecutorUtil
-import com.intellij.util.ui.UIUtil
 import com.intellij.platform.lsp.api.LspServerDescriptor
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.builders.ModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.CodeInsightFixtureTestCase
 import com.intellij.testFramework.fixtures.ModuleFixture
@@ -172,7 +172,7 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         try {
             val startedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
             while (!Files.exists(pid) && System.nanoTime() < startedDeadline) {
-                UIUtil.dispatchAllInvocationEvents()
+                PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
                 Thread.sleep(10)
             }
             assertTrue("SDK manager did not begin the version probe", Files.exists(pid))
@@ -180,7 +180,7 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
             manager.stopServers(BiomeLspServerSupportProvider::class.java)
             val cleanupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
             while (child.map { it.isAlive }.orElse(false) && System.nanoTime() < cleanupDeadline) {
-                UIUtil.dispatchAllInvocationEvents()
+                PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
                 Thread.sleep(10)
             }
             assertFalse("SDK stop left the initializing version probe alive", child.map { it.isAlive }.orElse(false))
@@ -215,7 +215,7 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         try {
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
             while (created.count != 0L && System.nanoTime() < deadline) {
-                UIUtil.dispatchAllInvocationEvents()
+                PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
                 Thread.sleep(10)
             }
             assertEquals("The final server process factory was not entered", 0L, created.count)
@@ -238,14 +238,19 @@ class BiomeStartupLspTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Modu
         try {
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
             while (System.nanoTime() < deadline) {
-                UIUtil.dispatchAllInvocationEvents()
+                // Startup can wait behind platform write-intent work. The IDE dispatcher
+                // releases the test's write-intent lock while draining pending events.
+                PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
                 val server = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
                     .find { it.descriptor === descriptor }
                 if (server?.state == LspServerState.Running) return
                 if (server?.state == LspServerState.ShutdownUnexpectedly) fail("SDK server startup failed")
                 Thread.sleep(10)
             }
-            fail("SDK server did not initialize")
+            val servers = manager.getServersForProvider(BiomeLspServerSupportProvider::class.java)
+                .map { "${it.state} (requested descriptor: ${it.descriptor === descriptor})" }
+            val commands = if (Files.exists(invocationLog)) Files.readAllLines(invocationLog) else emptyList()
+            fail("SDK server did not initialize; servers=$servers; commands=$commands")
         } finally {
             manager.stopServers(BiomeLspServerSupportProvider::class.java)
         }
