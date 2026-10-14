@@ -12,5 +12,4 @@ Run the focused checks with:
 
 ```sh
 ./gradlew cleanTest test --tests '*BiomeSavePlatformLifecycleTest' --tests '*BiomeSaveActionsTest' --tests '*BiomeSaveOperationTest' --tests '*BiomeLegacySaveActionTest' --tests '*UnusedFunctionHighlightingTest' buildPlugin --no-build-cache
-python3 .github/scripts/check-required-tests.py build/test-results/test
 ```
