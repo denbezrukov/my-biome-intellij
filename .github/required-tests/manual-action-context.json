@@ -1,0 +1,10 @@
+{
+  "com.github.biomejs.intellijbiome.actions.BiomeManualActionContextTest": [
+    "testSupportedEditorIsAvailableOnBackgroundThread",
+    "testMissingEditorIsHiddenAndDoesNothing",
+    "testDisabledIntegrationIsHiddenAndDoesNothing",
+    "testReadOnlyDocumentIsHiddenAndDoesNothing",
+    "testDisposedEditorIsHiddenAndDoesNothing",
+    "testUnsupportedFileIsHiddenAndDirectInvocationExplainsWhy"
+  ]
+}

@@ -9,6 +9,7 @@ import com.github.biomejs.intellijbiome.settings.BiomeSettings
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -23,15 +24,31 @@ class BiomeApplySafeFixesAction : AnAction(), DumbAware {
         templatePresentation.icon = BiomeIcons.BiomeIcon
     }
 
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+
+    override fun update(event: AnActionEvent) {
+        val project = event.project
+        val editor = event.getData(CommonDataKeys.EDITOR)
+        val file = editor?.let { FileDocumentManager.getInstance().getFile(it.document) }
+        event.presentation.isEnabledAndVisible = project != null && !project.isDisposed &&
+            editor != null && !editor.isDisposed && editor.document.isWritable &&
+            file != null && file.isValid && !file.isDirectory &&
+            BiomeSettings.getInstance(project).let { it.isEnabled() && it.fileSupported(file) }
+    }
+
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
+        if (project.isDisposed) return
         val editor = event.getData(CommonDataKeys.EDITOR) ?: return
+        if (editor.isDisposed || !editor.document.isWritable) return
 
         val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Biome")
 
         val settings = BiomeSettings.getInstance(project)
+        if (!settings.isEnabled()) return
         val manager = FileDocumentManager.getInstance()
         val virtualFile = manager.getFile(editor.document) ?: return
+        if (!virtualFile.isValid || virtualFile.isDirectory) return
 
         if (!settings.fileSupported(virtualFile)) {
             notificationGroup.createNotification(title = BiomeBundle.message("biome.file.not.supported.title"),
